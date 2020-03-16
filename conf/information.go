@@ -2,7 +2,7 @@ package conf
 
 var (
 	Chan1 = make(chan *EventHand, 0)
-	Chan2 = make(chan *JobReturn, 100)
+	Chan2 = make(chan *JobReturn, 10)
 	Token = ""
 )
 
@@ -144,7 +144,8 @@ type (
 //返回的异步任务信息
 type (
 	JobInfo struct {
-		Info []JobMessage `json:"info"`
+		Info   []JobMessage `json:"info"`
+		Return []string     `json:"return"`
 	}
 	JobMessage struct {
 		Function  string            `json:"Function"`

@@ -16,10 +16,9 @@ func main() {
 	route.POST("/monitor", routes.AlterManagerWebHookHandler)
 	route.GET("/token", routes.GetToken)
 	route.POST("/test", routes.PostJobhandler)
-	//事件
+	route.GET("/jobs/", routes.GetJobInfo)
+	//事件监听处理
 	go saltstack.Event()
-	//
-	go saltstack.EventInfo()
 	//启动服务
 	if err := route.Run(":9091"); err != nil {
 		fmt.Println(err)

@@ -31,7 +31,7 @@ func AlterManagerWebHookHandler(c *gin.Context) {
 	ent = &conf.EventHand{
 		EventName: info.Alerts[0].Labels["lables"],
 		HostName:  info.Alerts[0].Labels["hostname"],
-		Address:   strings.Split(info.Alerts[3].Labels["instance"], ":")[0],
+		Address:   strings.Split(info.Alerts[0].Labels["instance"], ":")[0],
 		Event:     info.Alerts[0].Annotations["annotations"],
 		Status:    1,
 	}
@@ -77,4 +77,12 @@ func PostJobhandler(c *gin.Context) {
 	reinfo := a.PostModulJob(token, Job)
 	time.Sleep(5 * time.Second)
 	a.QueryJob(reinfo.Return[0].Jid, token)
+}
+
+//获取执行后的任务信息
+func GetJobInfo(c *gin.Context) {
+	id := c.Request.FormValue("id")
+	data := redao.GetDate(id)
+	c.Writer.WriteHeader(200)
+	c.Writer.WriteString(data)
 }

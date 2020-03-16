@@ -82,7 +82,7 @@ func (s *SaltController) PostModulJob(token string, cmd *conf.JobRunner) *conf.J
 	//读信息
 	infodata, _ := ioutil.ReadAll(response.Body)
 	json.Unmarshal(infodata, &relist)
-	fmt.Println("relist", relist)
+	//fmt.Println("relist", relist)
 	return &relist
 	//err = json.Unmarshal(infodata,&relist)
 	//if !Err.CheckERR(err,"Return Joblist Json Unmarshal is Failed"){
@@ -114,7 +114,7 @@ func pulicPost(token string, para *conf.JobRunner) (response *http.Response) {
 	re.Header.Set("Accept", conf.Json_Accept)
 	re.Header.Set("X-Auth-Token", token)
 	re.Header.Set("Content-Type", conf.Json_Content_Type)
-	fmt.Println(re)
+	//fmt.Println(re)
 	//新建Client
 	client := http.Client{}
 	//请求对端
@@ -126,7 +126,7 @@ func pulicPost(token string, para *conf.JobRunner) (response *http.Response) {
 }
 
 //执行Job任务查询
-func (s *SaltController) QueryJob(jobid string, token string) conf.JobInfo {
+func (s *SaltController) QueryJob(jobid string, token string) *conf.JobInfo {
 	var (
 		buf    []byte
 		result conf.JobInfo
@@ -134,28 +134,29 @@ func (s *SaltController) QueryJob(jobid string, token string) conf.JobInfo {
 	//新建请求
 	re, err := http.NewRequest("GET", conf.URL_job+jobid, bytes.NewBuffer(buf))
 	if !conf.CheckERR(err, "Create PostModulJob Request Failed") {
-		return result
+		return &result
 	}
 	defer re.Body.Close()
 	//设置请求头
 	re.Header.Set("Accept", conf.Json_Accept)
 	re.Header.Set("X-Auth-Token", token)
 	//re.Header.Set("Content-Type", conf.Json_Content_Type)
-	fmt.Println(re)
+	//fmt.Println(re)
 	//新建Client
 	client := http.Client{}
 	//请求对端
 	response, err := client.Do(re)
 	if !conf.CheckERR(err, "PostModulJob Client Request is Failed") {
-		return result
+		return &result
 	}
 	//读信息
 	infodata, _ := ioutil.ReadAll(response.Body)
-	fmt.Println(string(infodata))
+
 	//反序列化
 	json.Unmarshal(infodata, &result)
 	if !Err.CheckERR(err, "JobResult Unmarshal is Failed") {
-		return result
+		return &result
 	}
-	return result
+	fmt.Println("序列化后的数据", string(infodata))
+	return &result
 }
