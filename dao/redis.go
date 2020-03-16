@@ -2,11 +2,15 @@ package dao
 
 import (
 	"fmt"
+	"gin-web-demo/conf"
 	"github.com/gomodule/redigo/redis"
 	"time"
 )
 
 var Pool redis.Pool
+
+type RedisHandle struct {
+}
 
 //建立池连接
 func NewRedis() {
@@ -45,6 +49,55 @@ func redDial() (redis.Conn, error) {
 }
 
 //插入redis的数据
-func InsertDate() {
+func (r RedisHandle) InsertDate(key, value string) error {
+	//获取一个连接
+	c := Pool.Get()
+	defer c.Close()
+	//插入数据
+	_, err := c.Do("SET", key, value)
+	if !conf.CheckERR(err, "redis Set Value is Failed") {
+		return err
+	}
+	return err
+}
 
+//删除Redis数据
+func (r RedisHandle) DeleteData(key string) error {
+	//获取一个连接
+	c := Pool.Get()
+	defer c.Close()
+	//删除数据
+	_, err := c.Do("DELETE", key)
+	if !conf.CheckERR(err, "redis Delete Value is Failed") {
+		return err
+	}
+	return nil
+}
+
+//设置Key的超时
+func (r RedisHandle) InsertTTLData(key, value, ttl, time string) error {
+	//获取一个连接
+	c := Pool.Get()
+	defer c.Close()
+	//设置TTL
+	_, err := c.Do("SET", key, value, ttl, time)
+	if !conf.CheckERR(err, "redis Delete Value is Failed") {
+		return err
+	}
+	return nil
+}
+
+//查询Redis的值
+func (r RedisHandle) GetDate(key string) string {
+	//获取一个连接
+	c := Pool.Get()
+	defer c.Close()
+	//获取value
+	value, err := c.Do("GET", key)
+	if !conf.CheckERR(err, "redis Delete Value is Failed") {
+		return ""
+	}
+	//数据转换
+	va, _ := redis.String(value, err)
+	return va
 }

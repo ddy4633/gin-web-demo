@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"gin-web-demo/conf"
 	"gin-web-demo/controller/saltstack"
+	"gin-web-demo/dao"
 	"github.com/gin-gonic/gin"
 	"io/ioutil"
 	"strings"
 	"time"
 )
+
+var redao = dao.RedisHandle{}
 
 //定义Webhook
 func AlterManagerWebHookHandler(c *gin.Context) {
@@ -42,8 +45,12 @@ func GetToken(c *gin.Context) {
 	//var data conf.Returninfo
 	a := saltstack.SaltController{}
 	data := a.GetToken()
-	//fmt.Println(data.Return[0].Token)
-	conf.Token = data.Return[0].Token
+	//设置Token的过期时间
+	err := redao.InsertTTLData("token", data.Return[0].Token, "EX", "86400")
+	if !conf.CheckERR(err, "redisDAO SET Token is Failed") {
+		c.Writer.WriteString("写入Token失败")
+	}
+	c.Writer.WriteHeader(200)
 }
 
 //执行命令
@@ -65,7 +72,9 @@ func PostJobhandler(c *gin.Context) {
 	}
 
 	a := saltstack.SaltController{}
-	reinfo := a.PostModulJob(conf.Token, Job)
+	//获取token
+	token := redao.GetDate("token")
+	reinfo := a.PostModulJob(token, Job)
 	time.Sleep(5 * time.Second)
-	a.QueryJob(reinfo.Return[0].Jid, conf.Token)
+	a.QueryJob(reinfo.Return[0].Jid, token)
 }

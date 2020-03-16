@@ -3,14 +3,14 @@ package main
 import (
 	"fmt"
 	"gin-web-demo/controller/saltstack"
+	"gin-web-demo/dao"
 	"gin-web-demo/routes"
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
-	//初始化
-	//a := make(chan conf.EventsWait)
-
+	//初始化redis
+	dao.NewRedis()
 	route := gin.Default()
 	//定义路由
 	route.POST("/monitor", routes.AlterManagerWebHookHandler)
