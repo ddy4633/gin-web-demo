@@ -3,7 +3,6 @@ package saltstack
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"gin-web-demo/conf"
 	Err "gin-web-demo/conf"
 	"io/ioutil"
@@ -82,7 +81,7 @@ func (s *SaltController) PostModulJob(token string, cmd *conf.JobRunner) *conf.J
 	//读信息
 	infodata, _ := ioutil.ReadAll(response.Body)
 	json.Unmarshal(infodata, &relist)
-	//fmt.Println("relist", relist)
+	//fmt.Println("infodata=", infodata)
 	return &relist
 	//err = json.Unmarshal(infodata,&relist)
 	//if !Err.CheckERR(err,"Return Joblist Json Unmarshal is Failed"){
@@ -126,7 +125,7 @@ func pulicPost(token string, para *conf.JobRunner) (response *http.Response) {
 }
 
 //执行Job任务查询
-func (s *SaltController) QueryJob(jobid string, token string) *conf.JobInfo {
+func (s *SaltController) QueryJob(jobid string, token string) conf.JobInfo {
 	var (
 		buf    []byte
 		result conf.JobInfo
@@ -134,7 +133,7 @@ func (s *SaltController) QueryJob(jobid string, token string) *conf.JobInfo {
 	//新建请求
 	re, err := http.NewRequest("GET", conf.URL_job+jobid, bytes.NewBuffer(buf))
 	if !conf.CheckERR(err, "Create PostModulJob Request Failed") {
-		return &result
+		return result
 	}
 	defer re.Body.Close()
 	//设置请求头
@@ -147,16 +146,22 @@ func (s *SaltController) QueryJob(jobid string, token string) *conf.JobInfo {
 	//请求对端
 	response, err := client.Do(re)
 	if !conf.CheckERR(err, "PostModulJob Client Request is Failed") {
-		return &result
+		return result
 	}
 	//读信息
 	infodata, _ := ioutil.ReadAll(response.Body)
-
 	//反序列化
 	json.Unmarshal(infodata, &result)
 	if !Err.CheckERR(err, "JobResult Unmarshal is Failed") {
-		return &result
+		return result
 	}
-	fmt.Println("序列化后的数据", string(infodata))
-	return &result
+	//fmt.Println("序列化后的数据", infodata)
+	return result
+}
+
+//返回任务的最终执行结果
+func (s *SaltController) ReturnResult(jid string) string {
+	//获取数据源
+	data := reddao.GetDate(jid)
+	return data
 }

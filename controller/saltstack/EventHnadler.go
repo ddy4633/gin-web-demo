@@ -12,6 +12,7 @@ var (
 	a      = SaltController{}
 )
 
+//事件处理流
 func Event() {
 	for {
 		select {
@@ -23,6 +24,7 @@ func Event() {
 	}
 }
 
+//临时指定要post的操作
 func sched(data *conf.EventHand) {
 	info := reddao.GetDate("token")
 	//构造函数
@@ -30,40 +32,48 @@ func sched(data *conf.EventHand) {
 		Client: "local_async",
 		Tgt:    data.Address,
 		Fun:    "cmd.run",
-		Arg:    "ping -c 2 baidu.com",
+		Arg:    "time ping -c 2 baidu.com",
 	}
 	resultid := a.PostModulJob(info, Job)
 	conf.Chan2 <- resultid
 }
 
+//执行jobs事件的查询
 func handl(info *conf.JobReturn) {
+	//统计查询的次数
 	count := info.Count
 	count++
+	//查询Token
 	token := reddao.GetDate("token")
-	if count == 20 {
-		fmt.Println(info.Return[0].Minions, "+", info.Return[0].Jid, "无法获取到JOb信息")
+	//执行任务的ID号
+	jid := info.Return[0].Jid
+	//中断指令
+	if count == 60 {
+		reddao.SaddDate(info.Return[0].Jid)
+		fmt.Println(info.Return[0].Minions, "+", jid, "无法获取到JOb信息")
 		return
 	}
-	data := a.QueryJob(info.Return[0].Jid, token)
-	fmt.Println("!!!!!!!!时间处理的data=", data)
-	key := info.Return[0].Minions[0]
-	//fmt.Println("key=",key,"return=",data.Info[0].Result[key])
-	if _, ok := data.Info[0].Result[key]; ok {
-		fmt.Println("序列化前:", data)
-		//序列化
-		data, err := json.Marshal(&info)
-		if !conf.CheckERR(err, "EventHandle JSON Marshal is Failed") {
+	//查询任务情况
+	data := a.QueryJob(jid, token)
+	//获取目标主机的IP
+	//key := info.Return[0].Minions[0]
+	//判断是否取值成功,失败则重新进入队列等待再次的处理
+	if data.Info[0].Result[data.Info[0].Minions[0]].Success {
+		//构造写入redis的数据信息
+		endjob := conf.SetData(data)
+		a, err := json.Marshal(endjob)
+		if !conf.CheckERR(err, "构造写入redis的数据信息Json Manshal is Failed") {
 			return
 		}
-		//写入redis数据库
-		if err := reddao.InsertDate(info.Return[0].Jid, string(data)); err != nil {
+		//写入redis数据库(data.Info[0].Result[key].Return)
+		if err := reddao.InsertDate(jid, string(a)); err != nil {
 			fmt.Println(err)
 			return
 		}
 		fmt.Println("插入数据库成功=", info.Return[0].Jid)
 	} else {
-		info.Count = count
-		fmt.Println("没有获取到", info.Return[0].Minions, info.Count, "ID=", info.Return[0].Jid)
+		//info.Count = count
+		//fmt.Println("没有获取到", info.Return[0].Minions, info.Count, "ID=", info.Return[0].Jid)
 		conf.Chan2 <- info
 	}
 }

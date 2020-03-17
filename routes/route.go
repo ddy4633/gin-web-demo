@@ -82,7 +82,9 @@ func PostJobhandler(c *gin.Context) {
 //获取执行后的任务信息
 func GetJobInfo(c *gin.Context) {
 	id := c.Request.FormValue("id")
+	fmt.Println(id)
 	data := redao.GetDate(id)
+	fmt.Println(data)
 	c.Writer.WriteHeader(200)
 	c.Writer.WriteString(data)
 }

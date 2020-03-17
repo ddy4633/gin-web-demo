@@ -20,7 +20,7 @@ func main() {
 	//事件监听处理
 	go saltstack.Event()
 	//启动服务
-	if err := route.Run(":9091"); err != nil {
+	if err := route.Run(":9090"); err != nil {
 		fmt.Println(err)
 		return
 	}

@@ -101,3 +101,31 @@ func (r RedisHandle) GetDate(key string) string {
 	va, _ := redis.String(value, err)
 	return va
 }
+
+//查询失败的集合
+func (r RedisHandle) SmeDate() []string {
+	//获取一个连接
+	c := Pool.Get()
+	defer c.Close()
+	//设置value
+	re, err := c.Do("smembers", "Failed_List")
+	if !conf.CheckERR(err, "redis Delete Value is Failed") {
+		return []string{}
+	}
+	//转换成[]string
+	st, _ := redis.Strings(re, err)
+	return st
+}
+
+//设置redis的失败集合
+func (r RedisHandle) SaddDate(key string) error {
+	//获取一个连接
+	c := Pool.Get()
+	defer c.Close()
+	//设置value
+	_, err := c.Do("SADD", "Failed_List", key)
+	if !conf.CheckERR(err, "redis Delete Value is Failed") {
+		return err
+	}
+	return nil
+}

@@ -37,7 +37,7 @@ type EventsWait struct {
 	//暂时留给锁的位置
 }
 
-//具体返回信息
+//Token具体返回信息
 type Info struct {
 	Username  string   `json:"username"`
 	Password  string   `json:"password"`
@@ -49,26 +49,26 @@ type Info struct {
 }
 
 //返回信息
-type Returninfo struct {
-	Return []Info `json:"return"`
-}
-
-//salt基础信息
-type SaltInfo struct {
-	Token string `json:"token"`
-	User  string `json:"user"`
-	Eauth string `json:"eauth"`
-}
-
-//返回的Job信息
-type JobReturn struct {
-	Return []List `json:"return"`
-	Count  int
-}
-type List struct {
-	Jid     string   `json:"jid"`
-	Minions []string `json:"minions"`
-}
+type (
+	Returninfo struct {
+		Return []Info `json:"return"`
+	}
+	//salt基础信息
+	SaltInfo struct {
+		Token string `json:"token"`
+		User  string `json:"user"`
+		Eauth string `json:"eauth"`
+	}
+	//返回的Job信息
+	JobReturn struct {
+		Return []List `json:"return"`
+		Count  int
+	}
+	List struct {
+		Jid     string   `json:"jid"`
+		Minions []string `json:"minions"`
+	}
+)
 
 //任务结构体
 type JobRunner struct {
@@ -148,12 +148,31 @@ type (
 		Return []string     `json:"return"`
 	}
 	JobMessage struct {
-		Function  string            `json:"Function"`
-		Minions   []string          `json:"Minions"`
-		Result    map[string]string `json:"Result"`
-		StartTime string            `json:"StartTime"`
+		Jid       string          `json:"jid"`
+		Function  string          `json:"Function"`
+		Minions   []string        `json:"Minions"`
+		Result    map[string]Data `json:"Result"`
+		StartTime interface{}     `json:"StartTime"`
+		Arguments []string        `json:"Arguments"`
+	}
+	Data struct {
+		Return  string `json:"return"`
+		Retcode int    `json:"retcode"`
+		Success bool   `json:"success"`
 	}
 )
+
+//返回查询事件的参数
+type EndJob struct {
+	//任务开始的时间
+	StartTime string `json:"start_time"`
+	//任务总的执行完成时间
+	AggrTime string `json:"aggr_time"`
+	//目标主机
+	Target []string `json:"target"`
+	//执行的结果
+	Info string `json:"info"`
+}
 
 //常量值
 const (
@@ -162,3 +181,14 @@ const (
 	URL               = "http://10.200.10.23:8800/"
 	URL_job           = "http://10.200.10.23:8800/jobs/"
 )
+
+//返回构造好的插入redis中的结果数据
+func SetData(data JobInfo) *EndJob {
+	redata := &EndJob{
+		StartTime: data.Info[0].StartTime.(string),
+		AggrTime:  "",
+		Target:    data.Info[0].Minions,
+		Info:      data.Info[0].Result[data.Info[0].Minions[0]].Return,
+	}
+	return redata
+}
