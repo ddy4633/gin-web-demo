@@ -16,7 +16,7 @@ func main() {
 	route.POST("/monitor", routes.AlterManagerWebHookHandler)
 	route.GET("/token", routes.GetToken)
 	route.POST("/test", routes.PostJobhandler)
-	route.GET("/jobs/", routes.GetJobInfo)
+	route.GET("/jobs", routes.GetJobInfo)
 	//事件监听处理
 	go saltstack.Event()
 	//启动服务

@@ -9,7 +9,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"io/ioutil"
 	"strings"
-	"time"
 )
 
 var redao = dao.RedisHandle{}
@@ -70,16 +69,30 @@ func PostJobhandler(c *gin.Context) {
 		Fun:       fun,
 		Arg:       arg,
 	}
-
-	a := saltstack.SaltController{}
-	//获取token
-	token := redao.GetDate("token")
-	reinfo := a.PostModulJob(token, Job)
-	time.Sleep(5 * time.Second)
-	a.QueryJob(reinfo.Return[0].Jid, token)
+	//将执行的信息序列化存储到后端的redis中
+	data, err := json.Marshal(Job)
+	if !conf.CheckERR(err, "[PostJobHandler] json Marshal is Failed") {
+		c.JSON(401, gin.H{
+			"status": 1,
+			"info":   err,
+		})
+		return
+	}
+	//插入数据库
+	err = redao.InsertDate("Config", string(data))
+	if !conf.CheckERR(err, "[PostJobHandler] Insert Redis is Failed") {
+		c.JSON(401, gin.H{
+			"status": 1,
+			"info":   err,
+		})
+		return
+	}
+	c.JSON(200, gin.H{
+		"status": 0,
+	})
 }
 
-//获取执行后的任务信息
+//获取执行后的任务信息(以Josn回写)
 func GetJobInfo(c *gin.Context) {
 	id := c.Request.FormValue("id")
 	fmt.Println(id)

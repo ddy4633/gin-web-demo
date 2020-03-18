@@ -26,7 +26,15 @@ func Event() {
 
 //临时指定要post的操作
 func sched(data *conf.EventHand) {
+	var job *conf.JobRunner
+	//获取Token信息
 	info := reddao.GetDate("token")
+	//获取指定的参数信息
+	ac := reddao.GetDate("Config")
+	//反序列化得到变量
+	json.Unmarshal([]byte(ac), job)
+	job.Tgt = data.Address
+	/*测试的时候使用
 	//构造函数
 	Job := &conf.JobRunner{
 		Client: "local_async",
@@ -34,7 +42,8 @@ func sched(data *conf.EventHand) {
 		Fun:    "cmd.run",
 		Arg:    "time ping -c 2 baidu.com",
 	}
-	resultid := a.PostModulJob(info, Job)
+	*/
+	resultid := a.PostModulJob(info, job)
 	conf.Chan2 <- resultid
 }
 
