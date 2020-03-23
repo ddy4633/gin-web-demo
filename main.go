@@ -12,10 +12,17 @@ func main() {
 	//初始化redis
 	dao.NewRedis()
 	route := gin.Default()
-	//定义路由
+	//定义数据的增删改查操作
+	group_inter := route.Group("/data")
+	group_inter.POST("/add")
+	group_inter.POST("/delete")
+	group_inter.GET("/query")
+
+	//定义常规路由
+	//greoup_v1 := route.Group("v1")
 	route.POST("/monitor", routes.AlterManagerWebHookHandler)
 	route.GET("/token", routes.GetToken)
-	route.POST("/test", routes.PostJobhandler)
+	route.POST("/config", routes.PostJobhandler)
 	route.GET("/jobs", routes.GetJobInfo)
 	//事件监听处理
 	go saltstack.Event()

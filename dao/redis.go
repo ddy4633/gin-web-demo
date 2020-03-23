@@ -54,8 +54,16 @@ func (r RedisHandle) InsertDate(key, value string) error {
 	c := Pool.Get()
 	defer c.Close()
 	//插入数据
-	_, err := c.Do("SET", key, value)
+	_, err := c.Do("set", key, value)
 	if !conf.CheckERR(err, "redis Set Value is Failed") {
+		return err
+	}
+	if len(value) < 21 {
+		//插入有序类型
+		err = r.SaddDate(key)
+		if !conf.CheckERR(err, "redis Set SaddDate Value is Failed") {
+			return err
+		}
 		return err
 	}
 	return err
@@ -123,9 +131,40 @@ func (r RedisHandle) SaddDate(key string) error {
 	c := Pool.Get()
 	defer c.Close()
 	//设置value
-	_, err := c.Do("SADD", "Failed_List", key)
-	if !conf.CheckERR(err, "redis Delete Value is Failed") {
+	_, err := c.Do("ZADD", "Failed_List", key, 1)
+	if !conf.CheckERR(err, "redis Set SaddDate Value is Failed") {
 		return err
 	}
 	return nil
+}
+
+//查询指定范围的有序集合
+func (r RedisHandle) ZrangeDate(key string, range1, range2 int) (t []string, err error) {
+	//获取一个连接
+	c := Pool.Get()
+	defer c.Close()
+	//查询key
+	info, err := c.Do("ZRANGE", key, range1, range2)
+	if !conf.CheckERR(err, "redis query ZRANGE Value is Failed") {
+		return t, err
+	}
+	//处理返回的列表
+	t, err = redis.Strings(info, err)
+	if !conf.CheckERR(err, "redis Delete Value is Failed") {
+		return t, err
+	}
+	return t, nil
+}
+
+//删除有序集合中的元素
+func (r RedisHandle) ZremDate(key, value string) error {
+	//获取一个连接
+	c := Pool.Get()
+	defer c.Close()
+	//查询key
+	_, err := c.Do("ZREM", key, value)
+	if !conf.CheckERR(err, "redis ZREM Value is Failed") {
+		return err
+	}
+	return err
 }

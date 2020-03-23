@@ -19,20 +19,32 @@ func Event() {
 		case data := <-conf.Chan1:
 			go sched(data)
 		case info := <-conf.Chan2:
-			go handl(info)
+			if info.Return == nil {
+				continue
+			} else {
+				go handl(info)
+			}
 		}
 	}
 }
 
 //临时指定要post的操作
 func sched(data *conf.EventHand) {
-	var job *conf.JobRunner
+	var (
+		job      conf.JobRunner
+		info, ac string
+	)
 	//获取Token信息
-	info := reddao.GetDate("token")
+	if info = reddao.GetDate("token"); info == "" {
+		info = a.GetToken().Return[0].Token
+	}
 	//获取指定的参数信息
-	ac := reddao.GetDate("Config")
+	if ac = reddao.GetDate("Config"); ac == "" {
+		fmt.Println("请设置好Config信息")
+		return
+	}
 	//反序列化得到变量
-	json.Unmarshal([]byte(ac), job)
+	json.Unmarshal([]byte(ac), &job)
 	job.Tgt = data.Address
 	/*测试的时候使用
 	//构造函数
@@ -64,6 +76,10 @@ func handl(info *conf.JobReturn) {
 	}
 	//查询任务情况
 	data := a.QueryJob(jid, token)
+	//排除空数组行为
+	if data.Info[0].Minions == nil {
+		return
+	}
 	//获取目标主机的IP
 	//key := info.Return[0].Minions[0]
 	//判断是否取值成功,失败则重新进入队列等待再次的处理

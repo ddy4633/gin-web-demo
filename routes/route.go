@@ -31,7 +31,7 @@ func AlterManagerWebHookHandler(c *gin.Context) {
 		EventName: info.Alerts[0].Labels["lables"],
 		HostName:  info.Alerts[0].Labels["hostname"],
 		Address:   strings.Split(info.Alerts[0].Labels["instance"], ":")[0],
-		Event:     info.Alerts[0].Annotations["annotations"],
+		Event:     info.Alerts[0].Annotations["description"],
 		Status:    1,
 	}
 	//传递给channel调用
@@ -39,7 +39,7 @@ func AlterManagerWebHookHandler(c *gin.Context) {
 	c.Writer.WriteString("ok")
 }
 
-//测试去Token
+//测试Token
 func GetToken(c *gin.Context) {
 	//var data conf.Returninfo
 	a := saltstack.SaltController{}
@@ -49,7 +49,7 @@ func GetToken(c *gin.Context) {
 	if !conf.CheckERR(err, "redisDAO SET Token is Failed") {
 		c.Writer.WriteString("写入Token失败")
 	}
-	c.Writer.WriteHeader(200)
+	c.JSON(200, gin.H{"toekn": data.Return[0].Token})
 }
 
 //执行命令
@@ -100,4 +100,11 @@ func GetJobInfo(c *gin.Context) {
 	fmt.Println(data)
 	c.Writer.WriteHeader(200)
 	c.Writer.WriteString(data)
+}
+
+//获取指定数量的Job任务数
+func GetJobListPage(c *gin.Context) {
+	//页面
+	//page := c.Request.FormValue("page")
+
 }
