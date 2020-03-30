@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"gin-web-demo/conf"
+	dd "gin-web-demo/controller/dingding"
 	"gin-web-demo/dao"
+	"strings"
 )
 
 var (
@@ -31,12 +33,16 @@ func Event() {
 //临时指定要post的操作
 func sched(data *conf.EventHand) {
 	var (
-		job      conf.JobRunner
+		job      *conf.AddonJobRunner
 		info, ac string
 	)
 	//获取Token信息
 	if info = reddao.GetDate("token"); info == "" {
 		info = a.GetToken().Return[0].Token
+		err := reddao.InsertTTLData("token", info, "EX", "86400")
+		if !conf.CheckERR(err, "Inserter Token Failed") {
+			return
+		}
 	}
 	//获取指定的参数信息
 	if ac = reddao.GetDate("Config"); ac == "" {
@@ -44,18 +50,33 @@ func sched(data *conf.EventHand) {
 		return
 	}
 	//反序列化得到变量
-	json.Unmarshal([]byte(ac), &job)
-	job.Tgt = data.Address
-	/*测试的时候使用
-	//构造函数
-	Job := &conf.JobRunner{
-		Client: "local_async",
-		Tgt:    data.Address,
-		Fun:    "cmd.run",
-		Arg:    "time ping -c 2 baidu.com",
+	err := json.Unmarshal([]byte(ac), &job)
+	if !conf.CheckERR(err, "") {
+		return
 	}
+	//处理事件过滤
+	if !filtstring(data, job.Para) {
+		return
+	}
+	//判断事件是否需要处理
+	if job.Switch == 1 {
+		fmt.Println("[Info]开关已经关闭")
+		return
+	}
+	job.Job.Tgt = data.Address
+	/*测试的时候使用
+	  //构造函数
+	  Job := &conf.JobRunner{
+	          Client: "local_async",
+	          Tgt:    data.Address,
+	          Fun:    "cmd.run",
+	          Arg:    "time ping -c 2 baidu.com",
+	  }
 	*/
-	resultid := a.PostModulJob(info, job)
+	//进行Post请求取回事物执行ID
+	resultid := a.PostModulJob(info, &job.Job)
+	//构造对象
+	//fmt.Println(data.Event)
 	conf.Chan2 <- resultid
 }
 
@@ -96,9 +117,36 @@ func handl(info *conf.JobReturn) {
 			return
 		}
 		fmt.Println("插入数据库成功=", info.Return[0].Jid)
+		//传递的钉钉构造函数
+		markdown := conf.SetDD(data, endjob)
+		err = dd.Postcontent(markdown)
+		if !conf.CheckERR(err, "PostDingding is Failed") {
+			return
+		}
 	} else {
 		//info.Count = count
 		//fmt.Println("没有获取到", info.Return[0].Minions, info.Count, "ID=", info.Return[0].Jid)
 		conf.Chan2 <- info
 	}
+}
+
+//过滤处理的事件
+func filtstring(data *conf.EventHand, para conf.ParaMeter) bool {
+	//取出事件
+	event := data.Event
+	//取出主机名称
+	hostname := data.HostName
+	//循环读出数据
+	ev := strings.Split(para.ParaEvent, ",")
+	//过滤所有的字段是否匹配
+	for _, a := range ev {
+		if a != "" && strings.Contains(event, a) {
+			return false
+		}
+	}
+	//Hostname判断
+	if para.ParaHost != "" && strings.Contains(hostname, para.ParaHost) {
+		return false
+	}
+	return true
 }

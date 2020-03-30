@@ -130,12 +130,28 @@ func (r RedisHandle) SaddDate(key string) error {
 	//获取一个连接
 	c := Pool.Get()
 	defer c.Close()
+	//获取当前的位置
+	num := r.ZcardDate(key)
 	//设置value
-	_, err := c.Do("ZADD", "Failed_List", key, 1)
+	_, err := c.Do("ZADD", "FailedList", num, key)
 	if !conf.CheckERR(err, "redis Set SaddDate Value is Failed") {
 		return err
 	}
 	return nil
+}
+
+//查询有序集合总数
+func (r RedisHandle) ZcardDate(key string) int {
+	//获取一个连接
+	c := Pool.Get()
+	defer c.Close()
+	//设置value
+	v, err := c.Do("ZCARD", "FailedList")
+	if !conf.CheckERR(err, "redis query ZCARD Value is Failed") {
+		return 0
+	}
+	num, _ := redis.Int(v, err)
+	return num + 1
 }
 
 //查询指定范围的有序集合

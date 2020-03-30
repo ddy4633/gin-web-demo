@@ -1,8 +1,17 @@
 package conf
 
+import (
+	"fmt"
+	"time"
+)
+
 var (
-	Chan1 = make(chan *EventHand, 0)
-	Chan2 = make(chan *JobReturn, 10)
+	//告警结构构造
+	Chan1 = make(chan *EventHand, 100)
+	//事务处理事件拉取
+	Chan2 = make(chan *JobReturn, 30)
+	//钉钉消息处理
+	Chan3 = make(chan *JobReturn, 30)
 	Token = ""
 )
 
@@ -101,7 +110,26 @@ type JobRunner struct {
 	Fun string `json:"fun"`
 	//fun的参数项
 	Arg string `json:"arg"`
+	//要过滤的参数选项
+	//Para string `json:"-"`
 }
+
+//带过滤的事件
+type (
+	AddonJobRunner struct {
+		Job JobRunner
+		//要过滤的参数选项
+		Para ParaMeter `json:"para"`
+		//是否执行处理
+		Switch int `json:"switch"`
+	}
+	ParaMeter struct {
+		//主机名过滤
+		ParaHost string `json:"parahost"`
+		//过滤事件
+		ParaEvent string `json:"paraevent"`
+	}
+)
 
 //自定义需要接收AlterManager的结构体
 type (
@@ -143,6 +171,10 @@ type (
 
 //返回的异步任务信息
 type (
+	DDMsg struct {
+		Info  JobInfo `json:"info"`
+		Event string  `json:"event"`
+	}
 	JobInfo struct {
 		Info   []JobMessage `json:"info"`
 		Return []string     `json:"return"`
@@ -174,21 +206,116 @@ type EndJob struct {
 	Info string `json:"info"`
 }
 
+//使用钉钉的参数
+type (
+	Dingding struct {
+		Token   string
+		Message map[string]Dmessage
+	}
+	Dmessage struct {
+		Msgtype  string
+		markdown map[string]Detial
+		At       *At `json:at`
+	}
+	Detial struct {
+		Title string
+		Text  string
+	}
+	At struct {
+		AtMobiles []string `json:"atMobiles"`
+		IsAtAll   bool     `json:"isAtAll"`
+	}
+)
+
+//钉钉返回数据
+type (
+	//钉钉返回信息处理
+	ReturnDD struct {
+		Errcode int    `json:"errcode"`
+		Errmsg  string `json:"errmsg"`
+	}
+	//定义markdown格式
+	DingTalkMarkdown struct {
+		MsgType  string    `json:"msgtype"`
+		At       *At1      `json:at`
+		Markdown *Markdown `json:"markdown"`
+	}
+	//dingd详细内容
+	Markdown struct {
+		Title string `json:"title"`
+		Text  string `json:"text"`
+	}
+	//通知的消息
+	At1 struct {
+		AtMobiles []string `json:"atMobiles"`
+		IsAtAll   bool     `json:"isAtAll"`
+	}
+)
+
+//测试用例
+type AClert struct {
+	Labels      map[string]string `json:"labels"`
+	Annotations map[string]string `json:annotations`
+	StartsAt    time.Time         `json:"startsAt"`
+	EndsAt      time.Time         `json:"endsAt"`
+}
+
+type Notification struct {
+	Version           string            `json:"version"`
+	GroupKey          string            `json:"groupKey"`
+	Status            string            `json:"status"`
+	Receiver          string            `json:receiver`
+	GroupLabels       map[string]string `json:groupLabels`
+	CommonLabels      map[string]string `json:commonLabels`
+	CommonAnnotations map[string]string `json:commonAnnotations`
+	ExternalURL       string            `json:externalURL`
+	Alerts            []AClert          `json:alerts`
+}
+
+//大全局使用的结构体
+type AllMessage struct {
+	//需要处理的过滤事件集合
+	AddonRunners AddonJobRunner
+	//接受AlterManager的webhook告警信息
+	Notifications Notification
+	//异步取执行的事务信息
+	DDMsgs DDMsg
+}
+
 //常量值
 const (
 	Json_Accept       = "application/json"
 	Json_Content_Type = "application/json"
 	URL               = "http://10.200.10.23:8800/"
 	URL_job           = "http://10.200.10.23:8800/jobs/"
+	Webhook           = "https://oapi.dingtalk.com/robot/send?access_token=53338d71d47071ba7c62fd3c9cad9650a24c05bd06476e9cf26d74975f02e5d7"
 )
 
 //返回构造好的插入redis中的结果数据
 func SetData(data JobInfo) *EndJob {
 	redata := &EndJob{
 		StartTime: data.Info[0].StartTime.(string),
-		AggrTime:  "",
+		AggrTime:  time.Now().Format("2006-01-02 15:04:05"),
 		Target:    data.Info[0].Minions,
 		Info:      data.Info[0].Result[data.Info[0].Minions[0]].Return,
 	}
 	return redata
+}
+
+//构造传递给钉钉的消息对象
+func SetDD(data JobInfo, end *EndJob) *DingTalkMarkdown {
+	//内容构造
+	text := fmt.Sprintf("# 清理日志执行成功\n\n >当前IP -> %s\n - 处理的事件: %s\n - 处理的结果: %s\n - 执行的时间: %s", end.Target, end.Info, end.Info, end.AggrTime)
+	//构造消息函数
+	markdown := &DingTalkMarkdown{
+		MsgType: "markdown",
+		Markdown: &Markdown{
+			Title: "功能测试请忽略!",
+			Text:  text,
+		},
+		At: &At1{
+			IsAtAll: true,
+		},
+	}
+	return markdown
 }

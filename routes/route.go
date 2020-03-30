@@ -7,7 +7,7 @@ import (
 	"gin-web-demo/controller/saltstack"
 	"gin-web-demo/dao"
 	"github.com/gin-gonic/gin"
-	"io/ioutil"
+	"strconv"
 	"strings"
 )
 
@@ -16,26 +16,29 @@ var redao = dao.RedisHandle{}
 //定义Webhook
 func AlterManagerWebHookHandler(c *gin.Context) {
 	var (
-		info conf.HookMessageInfo
+		//info conf.HookMessageInfo
+		test conf.Notification
 	)
 	//转换字节流
-	byte, _ := ioutil.ReadAll(c.Request.Body)
+	//byte, _ := ioutil.ReadAll(c.Request.Body)
 	//转换成json对象
-	if json.Unmarshal(byte, &info) != nil {
-		fmt.Println("json error")
+	//if json.Unmarshal(byte, &info) != nil {
+	//	fmt.Println("json error")
+	//}
+	err := c.BindJSON(&test)
+	if !conf.CheckERR(err, "receive alterManager info json is Failed") {
+		return
 	}
-	//定义接受对象
-	var ent *conf.EventHand
-	//赋值对象
-	ent = &conf.EventHand{
-		EventName: info.Alerts[0].Labels["lables"],
-		HostName:  info.Alerts[0].Labels["hostname"],
-		Address:   strings.Split(info.Alerts[0].Labels["instance"], ":")[0],
-		Event:     info.Alerts[0].Annotations["description"],
+	//test过程
+	ent1 := &conf.EventHand{
+		EventName: test.Alerts[0].Labels["lables"],
+		HostName:  test.Alerts[0].Labels["hostname"],
+		Address:   strings.Split(test.Alerts[0].Labels["instance"], ":")[0],
+		Event:     test.Alerts[0].Annotations["description"],
 		Status:    1,
 	}
 	//传递给channel调用
-	conf.Chan1 <- ent
+	conf.Chan1 <- ent1
 	c.Writer.WriteString("ok")
 }
 
@@ -45,7 +48,7 @@ func GetToken(c *gin.Context) {
 	a := saltstack.SaltController{}
 	data := a.GetToken()
 	//设置Token的过期时间
-	err := redao.InsertTTLData("token", data.Return[0].Token, "EX", "86400")
+	err := redao.InsertTTLData("token", data.Return[0].Token, "EX", "18000")
 	if !conf.CheckERR(err, "redisDAO SET Token is Failed") {
 		c.Writer.WriteString("写入Token失败")
 	}
@@ -60,14 +63,27 @@ func PostJobhandler(c *gin.Context) {
 	expr := c.PostForm("expr_form")
 	fun := c.PostForm("fun")
 	arg := c.PostForm("arg")
+	parahost := c.PostForm("parahost")
+	paraevent := c.PostForm("paraevent")
+	switchs := c.PostForm("switch")
+	int, _ := strconv.Atoi(switchs)
 
 	//构造函数
-	Job := &conf.JobRunner{
+	info := conf.JobRunner{
 		Client:    cli,
 		Tgt:       tgt,
 		Expr_form: expr,
 		Fun:       fun,
 		Arg:       arg,
+	}
+	para := conf.ParaMeter{
+		ParaHost:  parahost,
+		ParaEvent: paraevent,
+	}
+	Job := &conf.AddonJobRunner{
+		Job:    info,
+		Para:   para,
+		Switch: int,
 	}
 	//将执行的信息序列化存储到后端的redis中
 	data, err := json.Marshal(Job)

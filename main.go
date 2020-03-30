@@ -17,7 +17,10 @@ func main() {
 	group_inter.POST("/add")
 	group_inter.POST("/delete")
 	group_inter.GET("/query")
-
+	//静态资源加载
+	route.Static("/static", "static")
+	//加载模板
+	route.LoadHTMLGlob("views/*")
 	//定义常规路由
 	//greoup_v1 := route.Group("v1")
 	route.POST("/monitor", routes.AlterManagerWebHookHandler)

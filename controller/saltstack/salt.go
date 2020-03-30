@@ -83,11 +83,6 @@ func (s *SaltController) PostModulJob(token string, cmd *conf.JobRunner) *conf.J
 	json.Unmarshal(infodata, &relist)
 	//fmt.Println("infodata=", infodata)
 	return &relist
-	//err = json.Unmarshal(infodata,&relist)
-	//if !Err.CheckERR(err,"Return Joblist Json Unmarshal is Failed"){
-	//	return
-	//}
-	//fmt.Println(relist)
 }
 
 //公共的POST整理
