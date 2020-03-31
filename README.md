@@ -2,7 +2,19 @@
 
 # 顾名思义
 
-- webhook前置条件
+>实现altermanager告警通过salt去调用定义的方法执行处理对应的告警,然后钉钉返回消息
+
+- 已经完成`处理日志过大`
+
+- 待完成`cpu过高分析`
+
+- 待完成`MEM过高分析`
+
+- 待完成`报表数据汇总管理展示`
+
+- 待完成`提供通用的resterful-API`
+
+## webhook前置条件
 
 ```shell script
 #1.vim altermanager.yaml
