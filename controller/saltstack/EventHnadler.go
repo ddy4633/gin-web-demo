@@ -21,7 +21,7 @@ func Event() {
 		case data := <-conf.Chan1:
 			go sched(data)
 		case info := <-conf.Chan2:
-			if info.Return == nil {
+			if info.JobReceipt.Return == nil {
 				continue
 			} else {
 				go handl(info)
@@ -31,7 +31,7 @@ func Event() {
 }
 
 //临时指定要post的操作
-func sched(data *conf.EventHand) {
+func sched(data *conf.AllMessage) {
 	var (
 		job      *conf.AddonJobRunner
 		info, ac string
@@ -55,15 +55,17 @@ func sched(data *conf.EventHand) {
 		return
 	}
 	//处理事件过滤
-	if !filtstring(data, job.Para) {
+	if !filtstring(data.Eventhand, job.Para) {
 		return
 	}
 	//判断事件是否需要处理
 	if job.Switch == 1 {
-		fmt.Println("[Info]开关已经关闭")
+		fmt.Printf("[Info]开关已经关闭,当前事件为=%s\n", data)
 		return
 	}
-	job.Job.Tgt = data.Address
+	job.Job.Tgt = data.Eventhand.Address
+	//赋值对象
+	data.AddonRunners = job
 	/*测试的时候使用
 	  //构造函数
 	  Job := &conf.JobRunner{
@@ -76,23 +78,24 @@ func sched(data *conf.EventHand) {
 	//进行Post请求取回事物执行ID
 	resultid := a.PostModulJob(info, &job.Job)
 	//构造对象
-	//fmt.Println(data.Event)
-	conf.Chan2 <- resultid
+	data.JobReceipt = resultid
+	//fmt.Println(data.Event);
+	conf.Chan2 <- data
 }
 
 //执行jobs事件的查询
-func handl(info *conf.JobReturn) {
+func handl(info *conf.AllMessage) {
 	//统计查询的次数
-	count := info.Count
+	count := info.JobReceipt.Count
 	count++
 	//查询Token
 	token := reddao.GetDate("token")
 	//执行任务的ID号
-	jid := info.Return[0].Jid
+	jid := info.JobReceipt.Return[0].Jid
 	//中断指令
-	if count == 60 {
-		reddao.SaddDate(info.Return[0].Jid)
-		fmt.Println(info.Return[0].Minions, "+", jid, "无法获取到JOb信息")
+	if count == info.AddonRunners.Count {
+		reddao.SaddDate(info.JobReceipt.Return[0].Jid)
+		fmt.Println(info.JobReceipt.Return[0].Minions, "+", jid, "无法获取到JOb信息")
 		return
 	}
 	//查询任务情况
@@ -116,16 +119,16 @@ func handl(info *conf.JobReturn) {
 			fmt.Println(err)
 			return
 		}
-		fmt.Println("插入数据库成功=", info.Return[0].Jid)
+		fmt.Println("插入数据库成功=", info.JobReceipt.Return[0].Jid)
 		//传递的钉钉构造函数
-		markdown := conf.SetDD(data, endjob)
+		markdown := conf.SetDD(info, endjob)
 		err = dd.Postcontent(markdown)
 		if !conf.CheckERR(err, "PostDingding is Failed") {
 			return
 		}
 	} else {
-		//info.Count = count
-		//fmt.Println("没有获取到", info.Return[0].Minions, info.Count, "ID=", info.Return[0].Jid)
+		//info.JobReceipt.Count = count
+		//fmt.Println("没有获取到", info.JobReceipt.Return[0].Minions, info.JobReceipt.Count, "ID=", info.JobReceipt.Return[0].Jid)
 		conf.Chan2 <- info
 	}
 }
@@ -136,7 +139,7 @@ func filtstring(data *conf.EventHand, para conf.ParaMeter) bool {
 	event := data.Event
 	//取出主机名称
 	hostname := data.HostName
-	//循环读出数据
+	//切分过滤的数据
 	ev := strings.Split(para.ParaEvent, ",")
 	//过滤所有的字段是否匹配
 	for _, a := range ev {
@@ -145,8 +148,11 @@ func filtstring(data *conf.EventHand, para conf.ParaMeter) bool {
 		}
 	}
 	//Hostname判断
-	if para.ParaHost != "" && strings.Contains(hostname, para.ParaHost) {
-		return false
+	evhost := strings.Split(para.ParaHost, ",")
+	for _, b := range evhost {
+		if b != "" && strings.Contains(hostname, b) {
+			return false
+		}
 	}
 	return true
 }

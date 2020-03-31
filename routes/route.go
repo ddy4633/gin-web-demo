@@ -6,6 +6,7 @@ import (
 	"gin-web-demo/conf"
 	"gin-web-demo/controller/saltstack"
 	"gin-web-demo/dao"
+	"gin-web-demo/tools"
 	"github.com/gin-gonic/gin"
 	"strconv"
 	"strings"
@@ -37,8 +38,22 @@ func AlterManagerWebHookHandler(c *gin.Context) {
 		Event:     test.Alerts[0].Annotations["description"],
 		Status:    1,
 	}
+	//生成全局唯一ID
+	id := tools.GetMd5String(tools.GetTimeNow())
+	//构造初始对象
+	Obj := &conf.AllMessage{ID: id, Notifications: test, Eventhand: ent1}
+	//序列化
+	data, err := json.Marshal(Obj)
+	if !conf.CheckERR(err, "JSON marshal ALLObj is Failed") {
+		return
+	}
+	//插入数据库
+	err = dao.RedisHandle{}.InsertDate(id, string(data))
+	if !conf.CheckERR(err, "Insert Redis dao.ALLObj is Failed") {
+		return
+	}
 	//传递给channel调用
-	conf.Chan1 <- ent1
+	conf.Chan1 <- Obj
 	c.Writer.WriteString("ok")
 }
 
@@ -66,8 +81,9 @@ func PostJobhandler(c *gin.Context) {
 	parahost := c.PostForm("parahost")
 	paraevent := c.PostForm("paraevent")
 	switchs := c.PostForm("switch")
-	int, _ := strconv.Atoi(switchs)
-
+	count := c.PostForm("count")
+	aint, _ := strconv.Atoi(switchs)
+	cint, _ := strconv.Atoi(count)
 	//构造函数
 	info := conf.JobRunner{
 		Client:    cli,
@@ -83,7 +99,8 @@ func PostJobhandler(c *gin.Context) {
 	Job := &conf.AddonJobRunner{
 		Job:    info,
 		Para:   para,
-		Switch: int,
+		Switch: aint,
+		Count:  cint,
 	}
 	//将执行的信息序列化存储到后端的redis中
 	data, err := json.Marshal(Job)
@@ -116,6 +133,17 @@ func GetJobInfo(c *gin.Context) {
 	fmt.Println(data)
 	c.Writer.WriteHeader(200)
 	c.Writer.WriteString(data)
+}
+
+func GetQueryJobInfo(c *gin.Context) {
+	//取出id数据
+	id := c.Param("id")
+	//查数据库
+	data := dao.RedisHandle{}.GetDate(id)
+	info := &conf.EndJob{}
+	json.Unmarshal([]byte(data), info)
+	//c.JSON(200,info)
+	c.HTML(200, "Message.html", info)
 }
 
 //获取指定数量的Job任务数

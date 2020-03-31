@@ -2,14 +2,16 @@ package conf
 
 import (
 	"fmt"
+	"gin-web-demo/tools"
 	"time"
 )
 
 var (
 	//告警结构构造
-	Chan1 = make(chan *EventHand, 100)
+	Chan1 = make(chan *AllMessage, 100)
 	//事务处理事件拉取
-	Chan2 = make(chan *JobReturn, 30)
+	//Chan2 = make(chan *JobReturn, 30)
+	Chan2 = make(chan *AllMessage, 30)
 	//钉钉消息处理
 	Chan3 = make(chan *JobReturn, 30)
 	Token = ""
@@ -122,6 +124,8 @@ type (
 		Para ParaMeter `json:"para"`
 		//是否执行处理
 		Switch int `json:"switch"`
+		//任务超时的次数
+		Count int `json:"count"`
 	}
 	ParaMeter struct {
 		//主机名过滤
@@ -236,8 +240,8 @@ type (
 	}
 	//定义markdown格式
 	DingTalkMarkdown struct {
-		MsgType  string    `json:"msgtype"`
-		At       *At1      `json:at`
+		MsgType  string `json:"msgtype"`
+		At       *At1
 		Markdown *Markdown `json:"markdown"`
 	}
 	//dingd详细内容
@@ -275,11 +279,17 @@ type Notification struct {
 //大全局使用的结构体
 type AllMessage struct {
 	//需要处理的过滤事件集合
-	AddonRunners AddonJobRunner
+	AddonRunners *AddonJobRunner
 	//接受AlterManager的webhook告警信息
 	Notifications Notification
 	//异步取执行的事务信息
 	DDMsgs DDMsg
+	//事件唯一ID号
+	ID string
+	//处理事件结构体
+	Eventhand *EventHand
+	//post的任务的异步回执单
+	JobReceipt *JobReturn
 }
 
 //常量值
@@ -295,7 +305,7 @@ const (
 func SetData(data JobInfo) *EndJob {
 	redata := &EndJob{
 		StartTime: data.Info[0].StartTime.(string),
-		AggrTime:  time.Now().Format("2006-01-02 15:04:05"),
+		AggrTime:  tools.GetTimeNow(),
 		Target:    data.Info[0].Minions,
 		Info:      data.Info[0].Result[data.Info[0].Minions[0]].Return,
 	}
@@ -303,9 +313,16 @@ func SetData(data JobInfo) *EndJob {
 }
 
 //构造传递给钉钉的消息对象
-func SetDD(data JobInfo, end *EndJob) *DingTalkMarkdown {
+func SetDD(data *AllMessage, end *EndJob) *DingTalkMarkdown {
+	ip := fmt.Sprintf("http://%s:9090/data/query/", tools.GetHostIP())
+	url := fmt.Sprintf("[点击即可查看详情](%s)", ip+data.JobReceipt.Return[0].Jid)
 	//内容构造
-	text := fmt.Sprintf("# 清理日志执行成功\n\n >当前IP -> %s\n - 处理的事件: %s\n - 处理的结果: %s\n - 执行的时间: %s", end.Target, end.Info, end.Info, end.AggrTime)
+	text := fmt.Sprintf("# 清理日志执行成功\n\n - 当前IP -> %s\n  - 执行的时间: %s\n - 处理的事件: %s \n - 处理的结果: %s\n - 详细日志信息: %s \n",
+		end.Target,
+		end.AggrTime,
+		data.Notifications.CommonAnnotations["description"],
+		"成功清除指定时间的日志",
+		url)
 	//构造消息函数
 	markdown := &DingTalkMarkdown{
 		MsgType: "markdown",

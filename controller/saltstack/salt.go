@@ -69,13 +69,6 @@ func (s *SaltController) PostModulJob(token string, cmd *conf.JobRunner) *conf.J
 		//临时使用
 		relist conf.JobReturn
 	)
-	//cmd := &conf.JobRunner{
-	//	Client:    "runner",
-	//	Tgt:       "10.200.10.23",
-	//	Expr_form: "",
-	//	Fun:       "jobs.active",
-	//	Arg:       "ping -c 3 baidu.com",
-	//}
 	//调用构造函数
 	response := pulicPost(token, cmd)
 	//读信息
