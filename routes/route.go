@@ -27,7 +27,7 @@ func AlterManagerWebHookHandler(c *gin.Context) {
 	//	fmt.Println("json error")
 	//}
 	err := c.BindJSON(&test)
-	if !conf.CheckERR(err, "receive alterManager info json is Failed") {
+	if !tools.CheckERR(err, "receive alterManager info json is Failed") {
 		return
 	}
 	//test过程
@@ -44,12 +44,12 @@ func AlterManagerWebHookHandler(c *gin.Context) {
 	Obj := &conf.AllMessage{ID: id, Notifications: test, Eventhand: ent1}
 	//序列化
 	data, err := json.Marshal(Obj)
-	if !conf.CheckERR(err, "JSON marshal ALLObj is Failed") {
+	if !tools.CheckERR(err, "JSON marshal ALLObj is Failed") {
 		return
 	}
 	//插入数据库
 	err = dao.RedisHandle{}.InsertDate(id, string(data))
-	if !conf.CheckERR(err, "Insert Redis dao.ALLObj is Failed") {
+	if !tools.CheckERR(err, "Insert Redis dao.ALLObj is Failed") {
 		return
 	}
 	//传递给channel调用
@@ -64,7 +64,7 @@ func GetToken(c *gin.Context) {
 	data := a.GetToken()
 	//设置Token的过期时间
 	err := redao.InsertTTLData("token", data.Return[0].Token, "EX", "18000")
-	if !conf.CheckERR(err, "redisDAO SET Token is Failed") {
+	if !tools.CheckERR(err, "redisDAO SET Token is Failed") {
 		c.Writer.WriteString("写入Token失败")
 	}
 	c.JSON(200, gin.H{"toekn": data.Return[0].Token})
@@ -104,7 +104,7 @@ func PostJobhandler(c *gin.Context) {
 	}
 	//将执行的信息序列化存储到后端的redis中
 	data, err := json.Marshal(Job)
-	if !conf.CheckERR(err, "[PostJobHandler] json Marshal is Failed") {
+	if !tools.CheckERR(err, "[PostJobHandler] json Marshal is Failed") {
 		c.JSON(401, gin.H{
 			"status": 1,
 			"info":   err,
@@ -113,7 +113,7 @@ func PostJobhandler(c *gin.Context) {
 	}
 	//插入数据库
 	err = redao.InsertDate("Config", string(data))
-	if !conf.CheckERR(err, "[PostJobHandler] Insert Redis is Failed") {
+	if !tools.CheckERR(err, "[PostJobHandler] Insert Redis is Failed") {
 		c.JSON(401, gin.H{
 			"status": 1,
 			"info":   err,
@@ -151,4 +151,9 @@ func GetJobListPage(c *gin.Context) {
 	//页面
 	//page := c.Request.FormValue("page")
 
+}
+
+//心跳
+func ResponPong(c *gin.Context) {
+	c.JSON(200, gin.H{"Message": "pong"})
 }

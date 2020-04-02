@@ -2,7 +2,7 @@ package dao
 
 import (
 	"fmt"
-	"gin-web-demo/conf"
+	"gin-web-demo/tools"
 	"github.com/gomodule/redigo/redis"
 	"time"
 )
@@ -55,13 +55,13 @@ func (r RedisHandle) InsertDate(key, value string) error {
 	defer c.Close()
 	//插入数据
 	_, err := c.Do("set", key, value)
-	if !conf.CheckERR(err, "redis Set Value is Failed") {
+	if !tools.CheckERR(err, "redis Set Value is Failed") {
 		return err
 	}
 	if len(value) < 21 {
 		//插入有序类型
 		err = r.SaddDate(key)
-		if !conf.CheckERR(err, "redis Set SaddDate Value is Failed") {
+		if !tools.CheckERR(err, "redis Set SaddDate Value is Failed") {
 			return err
 		}
 		return err
@@ -76,7 +76,7 @@ func (r RedisHandle) DeleteData(key string) error {
 	defer c.Close()
 	//删除数据
 	_, err := c.Do("DELETE", key)
-	if !conf.CheckERR(err, "redis Delete Value is Failed") {
+	if !tools.CheckERR(err, "redis Delete Value is Failed") {
 		return err
 	}
 	return nil
@@ -89,7 +89,7 @@ func (r RedisHandle) InsertTTLData(key, value, ttl, time string) error {
 	defer c.Close()
 	//设置TTL
 	_, err := c.Do("SET", key, value, ttl, time)
-	if !conf.CheckERR(err, "redis Delete Value is Failed") {
+	if !tools.CheckERR(err, "redis Delete Value is Failed") {
 		return err
 	}
 	return nil
@@ -102,7 +102,7 @@ func (r RedisHandle) GetDate(key string) string {
 	defer c.Close()
 	//获取value
 	value, err := c.Do("GET", key)
-	if !conf.CheckERR(err, "redis Delete Value is Failed") {
+	if !tools.CheckERR(err, "redis Delete Value is Failed") {
 		return ""
 	}
 	//数据转换
@@ -117,7 +117,7 @@ func (r RedisHandle) SmeDate() []string {
 	defer c.Close()
 	//设置value
 	re, err := c.Do("smembers", "Failed_List")
-	if !conf.CheckERR(err, "redis Delete Value is Failed") {
+	if !tools.CheckERR(err, "redis Delete Value is Failed") {
 		return []string{}
 	}
 	//转换成[]string
@@ -134,7 +134,7 @@ func (r RedisHandle) SaddDate(key string) error {
 	num := r.ZcardDate(key)
 	//设置value
 	_, err := c.Do("ZADD", "FailedList", num, key)
-	if !conf.CheckERR(err, "redis Set SaddDate Value is Failed") {
+	if !tools.CheckERR(err, "redis Set SaddDate Value is Failed") {
 		return err
 	}
 	return nil
@@ -147,7 +147,7 @@ func (r RedisHandle) ZcardDate(key string) int {
 	defer c.Close()
 	//设置value
 	v, err := c.Do("ZCARD", "FailedList")
-	if !conf.CheckERR(err, "redis query ZCARD Value is Failed") {
+	if !tools.CheckERR(err, "redis query ZCARD Value is Failed") {
 		return 0
 	}
 	num, _ := redis.Int(v, err)
@@ -161,12 +161,12 @@ func (r RedisHandle) ZrangeDate(key string, range1, range2 int) (t []string, err
 	defer c.Close()
 	//查询key
 	info, err := c.Do("ZRANGE", key, range1, range2)
-	if !conf.CheckERR(err, "redis query ZRANGE Value is Failed") {
+	if !tools.CheckERR(err, "redis query ZRANGE Value is Failed") {
 		return t, err
 	}
 	//处理返回的列表
 	t, err = redis.Strings(info, err)
-	if !conf.CheckERR(err, "redis Delete Value is Failed") {
+	if !tools.CheckERR(err, "redis Delete Value is Failed") {
 		return t, err
 	}
 	return t, nil
@@ -179,7 +179,7 @@ func (r RedisHandle) ZremDate(key, value string) error {
 	defer c.Close()
 	//查询key
 	_, err := c.Do("ZREM", key, value)
-	if !conf.CheckERR(err, "redis ZREM Value is Failed") {
+	if !tools.CheckERR(err, "redis ZREM Value is Failed") {
 		return err
 	}
 	return err

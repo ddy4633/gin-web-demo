@@ -3,6 +3,7 @@ package conf
 import (
 	"fmt"
 	"gin-web-demo/tools"
+	"github.com/gin-gonic/gin"
 	"time"
 )
 
@@ -12,17 +13,18 @@ var (
 	//事务处理事件拉取
 	//Chan2 = make(chan *JobReturn, 30)
 	Chan2 = make(chan *AllMessage, 30)
-	//钉钉消息处理
-	Chan3 = make(chan *JobReturn, 30)
-	Token = ""
+	//全局配置信息
+	Config Ginconf
 )
 
-//封装Ansible
+//封装Ansible命令
 type AnsibleAPI struct {
 	AddrIP []string //调用的IP
 	Module string   //调用的模块
 	Shell  string   //调用的命令
 }
+
+//封装ansible-palybooks
 
 //封装SSH
 type SSHInfo struct {
@@ -292,13 +294,21 @@ type AllMessage struct {
 	JobReceipt *JobReturn
 }
 
+type TokenCmdb struct {
+	Token    string     `json:"token"`
+	AuthCmdb AllMessage `json:"authcmdb"`
+}
+
+//认证CMDB的结构体
+type AuthCmdb struct {
+	UserName string `json:"username"`
+	PassWord string `json:"password"`
+}
+
 //常量值
 const (
 	Json_Accept       = "application/json"
 	Json_Content_Type = "application/json"
-	URL               = "http://10.200.10.23:8800/"
-	URL_job           = "http://10.200.10.23:8800/jobs/"
-	Webhook           = "https://oapi.dingtalk.com/robot/send?access_token=53338d71d47071ba7c62fd3c9cad9650a24c05bd06476e9cf26d74975f02e5d7"
 )
 
 //返回构造好的插入redis中的结果数据
@@ -335,4 +345,11 @@ func SetDD(data *AllMessage, end *EndJob) *DingTalkMarkdown {
 		},
 	}
 	return markdown
+}
+
+//写日志信息
+func WriteLog(obj string) {
+	if Config.Conf.LogMod == "debug" || Config.Conf.LogMod == "" {
+		fmt.Println(gin.DefaultWriter, obj)
+	}
 }

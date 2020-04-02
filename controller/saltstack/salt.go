@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"gin-web-demo/conf"
-	Err "gin-web-demo/conf"
+	"gin-web-demo/dao"
+	"gin-web-demo/tools"
 	"io/ioutil"
 	"net/http"
 	"time"
@@ -28,12 +29,12 @@ func (s *SaltController) GetToken() (saltinfo conf.Returninfo) {
 	}
 	//序列化
 	buf, err := json.Marshal(info)
-	if !Err.CheckERR(err, "Json Marshal is Failed") {
+	if !tools.CheckERR(err, "Json Marshal is Failed") {
 		return saltinfo
 	}
 	//新建一个请求
-	re, err := http.NewRequest("POST", "http://10.200.10.23:8800/login", bytes.NewBuffer(buf))
-	if !Err.CheckERR(err, "Creata New Request") {
+	re, err := http.NewRequest("POST", conf.Config.Conf.URL_LOGIN, bytes.NewBuffer(buf))
+	if !tools.CheckERR(err, "Creata New Request") {
 		return saltinfo
 	}
 	//设置请求格式
@@ -45,18 +46,18 @@ func (s *SaltController) GetToken() (saltinfo conf.Returninfo) {
 	}
 	//创建请求
 	respon, err := client.Do(re)
-	if !Err.CheckERR(err, "Create Client Request") {
+	if !tools.CheckERR(err, "Create Client Request") {
 		return saltinfo
 	}
 	defer respon.Body.Close()
 	//读返回信息
 	body, err := ioutil.ReadAll(respon.Body)
-	if !Err.CheckERR(err, "ReadALL response Body Failed") {
+	if !tools.CheckERR(err, "ReadALL response Body Failed") {
 		return saltinfo
 	}
 	//反序列化
 	err = json.Unmarshal(body, &saltinfo)
-	if !Err.CheckERR(err, "Json Unmarshal Returninfo Failed") {
+	if !tools.CheckERR(err, "Json Unmarshal Returninfo Failed") {
 		return saltinfo
 	}
 	//fmt.Println(saltinfo)
@@ -90,10 +91,10 @@ func pulicPost(token string, para *conf.JobRunner) (response *http.Response) {
 	}
 	//Object序列化
 	data, err := json.Marshal(cmd)
-	conf.CheckERR(err, "PostModulJob Object json marshal Is Failed")
+	tools.CheckERR(err, "PostModulJob Object json marshal Is Failed")
 	//新建请求
-	re, err := http.NewRequest("POST", conf.URL, bytes.NewBuffer(data))
-	if !conf.CheckERR(err, "Create PostModulJob Request Failed") {
+	re, err := http.NewRequest("POST", conf.Config.Conf.URL, bytes.NewBuffer(data))
+	if !tools.CheckERR(err, "Create PostModulJob Request Failed") {
 		return response
 	}
 	defer re.Body.Close()
@@ -106,7 +107,7 @@ func pulicPost(token string, para *conf.JobRunner) (response *http.Response) {
 	client := http.Client{}
 	//请求对端
 	response, err = client.Do(re)
-	if !conf.CheckERR(err, "PostModulJob Client Request is Failed") {
+	if !tools.CheckERR(err, "PostModulJob Client Request is Failed") {
 		return
 	}
 	return response
@@ -119,8 +120,8 @@ func (s *SaltController) QueryJob(jobid string, token string) conf.JobInfo {
 		result conf.JobInfo
 	)
 	//新建请求
-	re, err := http.NewRequest("GET", conf.URL_job+jobid, bytes.NewBuffer(buf))
-	if !conf.CheckERR(err, "Create PostModulJob Request Failed") {
+	re, err := http.NewRequest("GET", conf.Config.Conf.URL_JOBS+"/"+jobid, bytes.NewBuffer(buf))
+	if !tools.CheckERR(err, "Create PostModulJob Request Failed") {
 		return result
 	}
 	defer re.Body.Close()
@@ -133,14 +134,14 @@ func (s *SaltController) QueryJob(jobid string, token string) conf.JobInfo {
 	client := http.Client{}
 	//请求对端
 	response, err := client.Do(re)
-	if !conf.CheckERR(err, "PostModulJob Client Request is Failed") {
+	if !tools.CheckERR(err, "PostModulJob Client Request is Failed") {
 		return result
 	}
 	//读信息
 	infodata, _ := ioutil.ReadAll(response.Body)
 	//反序列化
 	json.Unmarshal(infodata, &result)
-	if !Err.CheckERR(err, "JobResult Unmarshal is Failed") {
+	if !tools.CheckERR(err, "JobResult Unmarshal is Failed") {
 		return result
 	}
 	//fmt.Println("序列化后的数据", infodata)
@@ -153,3 +154,57 @@ func (s *SaltController) ReturnResult(jid string) string {
 	data := reddao.GetDate(jid)
 	return data
 }
+
+//获取CMDB的认证Token
+func (s *SaltController) GetCMDBAUTH() error {
+	var obj conf.TokenCmdb
+	//构建对象
+	auth := &conf.AuthCmdb{
+		UserName: conf.Config.Conf.Ldap_user,
+		PassWord: tools.GetLdapPasswd(conf.Config.Conf.Ldap_passwd),
+	}
+	//序列化
+	au, err := json.Marshal(auth)
+	if !tools.CheckERR(err, "") {
+		return err
+	}
+	//构建连接
+	req, err := http.NewRequest("POST", conf.Config.Conf.CMDB_api, bytes.NewBuffer(au))
+	tools.CheckERR(err, "New CMDB Request URL IS Failed")
+	//设置request
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "JWT ")
+	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9")
+	//请求连接等待返回
+	client := http.Client{}
+	repon, err := client.Do(req)
+	//读信息
+	infodata, _ := ioutil.ReadAll(repon.Body)
+	tools.CheckERR(err, "Request CMDB IS Failed")
+	//反序列化
+	err = json.Unmarshal(infodata, &obj)
+	tools.CheckERR(err, "json Unmarshal CMDB IS Failed")
+	//存数据库
+	err = dao.RedisHandle{}.InsertTTLData("AuthToken", obj.Token, "EX", "18000")
+	tools.CheckERR(err, "json Unmarshal CMDB IS Failed")
+	return err
+}
+
+//查询CMDB的接口
+//func (s *SaltController) GetCMDBInfo(IP string) []string {
+//	//构建参数
+//	buf := []byte(IP)
+//	//构建连接
+//	req, err := http.NewRequest("POST", conf.Config.Conf.CMDB_api, bytes.NewBuffer(buf))
+//	tools.CheckERR(err, "New CMDB Request URL IS Failed")
+//	//设置request
+//	req.Header.Set("Content-Type", "application/json")
+//	req.Header.Set("Authorization", "JWT ")
+//	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9")
+//	//请求连接等待返回
+//	client := http.Client{}
+//	repon, err := client.Do(req)
+//	tools.CheckERR(err, "Request CMDB IS Failed")
+//	//ioutil.ReadAll(repon,)
+//
+//}

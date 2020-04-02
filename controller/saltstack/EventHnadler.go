@@ -6,6 +6,7 @@ import (
 	"gin-web-demo/conf"
 	dd "gin-web-demo/controller/dingding"
 	"gin-web-demo/dao"
+	"gin-web-demo/tools"
 	"strings"
 )
 
@@ -40,18 +41,23 @@ func sched(data *conf.AllMessage) {
 	if info = reddao.GetDate("token"); info == "" {
 		info = a.GetToken().Return[0].Token
 		err := reddao.InsertTTLData("token", info, "EX", "86400")
-		if !conf.CheckERR(err, "Inserter Token Failed") {
+		if !tools.CheckERR(err, "Inserter Token Failed") {
 			return
 		}
+		conf.WriteLog(fmt.Sprintf("[info]获取Token信息=%s\n", info))
+	}
+	//获取auth Token
+	if reddao.GetDate("AuthToken"); info == "" {
+		_ = a.GetCMDBAUTH()
 	}
 	//获取指定的参数信息
 	if ac = reddao.GetDate("Config"); ac == "" {
-		fmt.Println("请设置好Config信息")
+		conf.WriteLog(fmt.Sprintf("[info]Config配置信息没有设置\n"))
 		return
 	}
 	//反序列化得到变量
 	err := json.Unmarshal([]byte(ac), &job)
-	if !conf.CheckERR(err, "") {
+	if !tools.CheckERR(err, "") {
 		return
 	}
 	//处理事件过滤
@@ -60,7 +66,7 @@ func sched(data *conf.AllMessage) {
 	}
 	//判断事件是否需要处理
 	if job.Switch == 1 {
-		fmt.Printf("[Info]开关已经关闭,当前事件为=%s\n", data)
+		conf.WriteLog(fmt.Sprintf("%s[info]开关已经关闭,当前事件为=%s\n", tools.GetTimeNow(), data))
 		return
 	}
 	job.Job.Tgt = data.Eventhand.Address
@@ -79,13 +85,13 @@ func sched(data *conf.AllMessage) {
 	resultid := a.PostModulJob(info, &job.Job)
 	//构造对象
 	data.JobReceipt = resultid
-	//fmt.Println(data.Event);
+	conf.WriteLog(fmt.Sprintf("[Return]异步任务返回的消息%s", data.JobReceipt.Return))
 	conf.Chan2 <- data
 }
 
 //执行jobs事件的查询
 func handl(info *conf.AllMessage) {
-	//统计查询的次数
+	//统计查询的次数conf
 	count := info.JobReceipt.Count
 	count++
 	//查询Token
@@ -95,7 +101,7 @@ func handl(info *conf.AllMessage) {
 	//中断指令
 	if count == info.AddonRunners.Count {
 		reddao.SaddDate(info.JobReceipt.Return[0].Jid)
-		fmt.Println(info.JobReceipt.Return[0].Minions, "+", jid, "无法获取到JOb信息")
+		conf.WriteLog(fmt.Sprintf("%s[Result]执行结果反馈 %s", tools.GetTimeNow(), info.JobReceipt.Return[0].Minions, "+", jid, "无法获取到JOb信息"))
 		return
 	}
 	//查询任务情况
@@ -111,7 +117,7 @@ func handl(info *conf.AllMessage) {
 		//构造写入redis的数据信息
 		endjob := conf.SetData(data)
 		a, err := json.Marshal(endjob)
-		if !conf.CheckERR(err, "构造写入redis的数据信息Json Manshal is Failed") {
+		if !tools.CheckERR(err, "构造写入redis的数据信息Json Manshal is Failed") {
 			return
 		}
 		//写入redis数据库(data.Info[0].Result[key].Return)
@@ -123,12 +129,15 @@ func handl(info *conf.AllMessage) {
 		//传递的钉钉构造函数
 		markdown := conf.SetDD(info, endjob)
 		err = dd.Postcontent(markdown)
-		if !conf.CheckERR(err, "PostDingding is Failed") {
+		if !tools.CheckERR(err, "PostDingding is Failed") {
 			return
 		}
 	} else {
-		//info.JobReceipt.Count = count
+		info.JobReceipt.Count = count
 		//fmt.Println("没有获取到", info.JobReceipt.Return[0].Minions, info.JobReceipt.Count, "ID=", info.JobReceipt.Return[0].Jid)
+		if count%10 == 0 {
+			conf.WriteLog(fmt.Sprintf("%s[Process]没有获取到 节点=%s,次数=%s,ID=%s", tools.GetTimeNow(), info.JobReceipt.Return[0].Minions, info.JobReceipt.Count, info.JobReceipt.Return[0].Jid))
+		}
 		conf.Chan2 <- info
 	}
 }
@@ -144,6 +153,7 @@ func filtstring(data *conf.EventHand, para conf.ParaMeter) bool {
 	//过滤所有的字段是否匹配
 	for _, a := range ev {
 		if a != "" && strings.Contains(event, a) {
+			conf.WriteLog(fmt.Sprintf("%s[info]事件判断不成立=%s\n", a))
 			return false
 		}
 	}
@@ -151,6 +161,7 @@ func filtstring(data *conf.EventHand, para conf.ParaMeter) bool {
 	evhost := strings.Split(para.ParaHost, ",")
 	for _, b := range evhost {
 		if b != "" && strings.Contains(hostname, b) {
+			conf.WriteLog(fmt.Sprintf("%s[info]主机名判断不成立=%s\n", b))
 			return false
 		}
 	}
