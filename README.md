@@ -37,6 +37,6 @@ groups:
 
 ```
 
-- 实现的代码逻辑
+- 实现的代码逻辑架构图
 
 ![](https://i.imgur.com/WtuwuBX.png)

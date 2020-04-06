@@ -8,11 +8,12 @@ import (
 	"gin-web-demo/dao"
 	"gin-web-demo/tools"
 	"strings"
+	"time"
 )
 
 var (
 	reddao = dao.RedisHandle{}
-	a      = SaltController{}
+	salt   = SaltController{}
 )
 
 //事件处理流
@@ -39,7 +40,7 @@ func sched(data *conf.AllMessage) {
 	)
 	//获取Token信息
 	if info = reddao.GetDate("token"); info == "" {
-		info = a.GetToken().Return[0].Token
+		info = salt.GetToken().Return[0].Token
 		err := reddao.InsertTTLData("token", info, "EX", "86400")
 		if !tools.CheckERR(err, "Inserter Token Failed") {
 			return
@@ -48,7 +49,11 @@ func sched(data *conf.AllMessage) {
 	}
 	//获取auth Token
 	if reddao.GetDate("AuthToken"); info == "" {
-		_ = a.GetCMDBAUTH()
+		err := salt.GetCMDBAUTH()
+		if err != nil {
+			conf.WriteLog(fmt.Sprintf("[error]无法获取到token,%s\n", err))
+			return
+		}
 	}
 	//获取指定的参数信息
 	if ac = reddao.GetDate("Config"); ac == "" {
@@ -69,7 +74,7 @@ func sched(data *conf.AllMessage) {
 		conf.WriteLog(fmt.Sprintf("%s[info]开关已经关闭,当前事件为=%s\n", tools.GetTimeNow(), data))
 		return
 	}
-	job.Job.Tgt = data.Eventhand.Address
+	//job.Job.Tgt = data.Eventhand.Address
 	//赋值对象
 	data.AddonRunners = job
 	/*测试的时候使用
@@ -81,12 +86,24 @@ func sched(data *conf.AllMessage) {
 	          Arg:    "time ping -c 2 baidu.com",
 	  }
 	*/
-	//进行Post请求取回事物执行ID
-	resultid := a.PostModulJob(info, &job.Job)
-	//构造对象
-	data.JobReceipt = resultid
-	conf.WriteLog(fmt.Sprintf("[Return]异步任务返回的消息%s", data.JobReceipt.Return))
-	conf.Chan2 <- data
+	//取ipgroup组信息
+	ipgroup := salt.GetCMDBInfo(data.Eventhand.Address)
+	ipgroups := strings.Split(ipgroup, ",")
+	conf.WriteLog(fmt.Sprintf("%s[Return]CMDB返回的消息=%s\n", time.Now().Format("2006-01-02 15:04:05"), ipgroups))
+	for _, ip := range ipgroups {
+		//赋值给IP
+		job.Job.Tgt = ip
+		//进行Post请求取回事物执行ID
+		resultid := salt.PostModulJob(info, &job.Job)
+		//不存在则成立跳出循环
+		if len(resultid.Return[0].Minions) > 0 {
+			//构造对象
+			data.JobReceipt = resultid
+			conf.WriteLog(fmt.Sprintf("%s[Return]异步任务返回的消息%s\n", time.Now().Format("2006-01-02 15:04:05"), data.JobReceipt.Return))
+			conf.Chan2 <- data
+		}
+	}
+	conf.WriteLog(fmt.Sprintf("%s[Return]异步任务返回的消息都为空请检查{%s}\n", time.Now().Format("2006-01-02 15:04:05"), ipgroup))
 }
 
 //执行jobs事件的查询
@@ -101,11 +118,11 @@ func handl(info *conf.AllMessage) {
 	//中断指令
 	if count == info.AddonRunners.Count {
 		reddao.SaddDate(info.JobReceipt.Return[0].Jid)
-		conf.WriteLog(fmt.Sprintf("%s[Result]执行结果反馈 %s", tools.GetTimeNow(), info.JobReceipt.Return[0].Minions, "+", jid, "无法获取到JOb信息"))
+		conf.WriteLog(fmt.Sprintf("%s[Result]执行结果反馈 %s\n", time.Now().Format("2006-01-02 15:04:05"), info.JobReceipt.Return[0].Minions, "+", jid, "无法获取到JOb信息"))
 		return
 	}
 	//查询任务情况
-	data := a.QueryJob(jid, token)
+	data := salt.QueryJob(jid, token)
 	//排除空数组行为
 	if data.Info[0].Minions == nil {
 		return
@@ -125,7 +142,7 @@ func handl(info *conf.AllMessage) {
 			fmt.Println(err)
 			return
 		}
-		fmt.Println("插入数据库成功=", info.JobReceipt.Return[0].Jid)
+		conf.WriteLog(fmt.Sprintf("插入数据库成功=%s\n", info.JobReceipt.Return[0].Jid))
 		//传递的钉钉构造函数
 		markdown := conf.SetDD(info, endjob)
 		err = dd.Postcontent(markdown)
@@ -136,7 +153,7 @@ func handl(info *conf.AllMessage) {
 		info.JobReceipt.Count = count
 		//fmt.Println("没有获取到", info.JobReceipt.Return[0].Minions, info.JobReceipt.Count, "ID=", info.JobReceipt.Return[0].Jid)
 		if count%10 == 0 {
-			conf.WriteLog(fmt.Sprintf("%s[Process]没有获取到 节点=%s,次数=%s,ID=%s", tools.GetTimeNow(), info.JobReceipt.Return[0].Minions, info.JobReceipt.Count, info.JobReceipt.Return[0].Jid))
+			conf.WriteLog(fmt.Sprintf("%s[Process]没有获取到 节点=%s,次数=%s,ID=%s\n", time.Now().Format("2006-01-02 15:04:05"), info.JobReceipt.Return[0].Minions, info.JobReceipt.Count, info.JobReceipt.Return[0].Jid))
 		}
 		conf.Chan2 <- info
 	}

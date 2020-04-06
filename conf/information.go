@@ -278,6 +278,32 @@ type Notification struct {
 	Alerts            []AClert          `json:alerts`
 }
 
+//sls格式返回数据的处理接收
+type RetuenSls struct {
+	Info []struct {
+	} `json:"info"`
+	Return []struct {
+		IP struct {
+			Cmd__mycommand__df__h__run struct {
+				ID      string `json:"__id__"`
+				RunNum  int64  `json:"__run_num__"`
+				Sls     string `json:"__sls__"`
+				Changes struct {
+					Pid     int64  `json:"pid"`
+					Retcode int64  `json:"retcode"`
+					Stderr  string `json:"stderr"`
+					Stdout  string `json:"stdout"`
+				} `json:"changes"`
+				Comment   string  `json:"comment"`
+				Duration  float64 `json:"duration"`
+				Name      string  `json:"name"`
+				Result    bool    `json:"result"`
+				StartTime string  `json:"start_time"`
+			} `json:"cmd_|-mycommand_|-df -h_|-run"`
+		} `json:"192.168.3.138"`
+	} `json:"return"`
+}
+
 //大全局使用的结构体
 type AllMessage struct {
 	//需要处理的过滤事件集合
@@ -294,6 +320,17 @@ type AllMessage struct {
 	JobReceipt *JobReturn
 }
 
+//cmdb返回的IP
+type Retuencmdb struct {
+	Msg  string `json:"message"`
+	Data struct {
+		IPgroup  string `json:"ipgroup"`
+		Hostname string `json:"hostname"`
+	}
+	Code int `json:"code"`
+}
+
+//获取cmdbtoken
 type TokenCmdb struct {
 	Token    string     `json:"token"`
 	AuthCmdb AllMessage `json:"authcmdb"`

@@ -2,6 +2,7 @@ package dao
 
 import (
 	"fmt"
+	"gin-web-demo/conf"
 	"gin-web-demo/tools"
 	"github.com/gomodule/redigo/redis"
 	"time"
@@ -37,7 +38,7 @@ func testBorrow(conn redis.Conn, t time.Time) error {
 
 //设置建立连接方式
 func redDial() (redis.Conn, error) {
-	c, err := redis.Dial("tcp", "10.1.0.42:6379",
+	c, err := redis.Dial("tcp", conf.Config.Conf.DataBase[0].Host,
 		redis.DialConnectTimeout(10*time.Second),
 		redis.DialReadTimeout(5*time.Second),
 		redis.DialWriteTimeout(3*time.Second))

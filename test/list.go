@@ -22,6 +22,11 @@ func main() {
 	b := &na{name: d}
 
 	fmt.Println(b.name[0].aa["asdas"])
+
+	str := []string{"127.0.0.1", "10.10.8.27"}
+	for index, value := range str {
+		fmt.Printf("str[%s]=value(%s)\n", index, value)
+	}
 }
 
 func twoSum(nums []int, target int) []int {
