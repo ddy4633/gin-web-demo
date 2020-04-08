@@ -40,3 +40,21 @@ groups:
 - 实现的代码逻辑架构图
 
 ![](https://i.imgur.com/WtuwuBX.png)
+
+- 配置文件修改方式
+
+```shell script
+请求头: Content-Type:application/x-www-form-urlencoded
+请求地址: http://你配置文件中写入的地址/config
+请求参数:
+client:saltstack执行方式
+tgt:目标节点
+func:执行的函数名称
+arg:具体的命令
+paraevent:过滤的hostname中包含的字段
+switch:是否处理任务的开关(0开1关)
+count:saltstack任务执行超时时间
+parahost:过滤的instace信息
+```
+
+![](https://s1.ax1x.com/2020/04/08/GWwnFx.png)

@@ -43,7 +43,7 @@ func sched(data *conf.AllMessage) {
 	//获取Token信息
 	if info = reddao.GetDate("token"); info == "" {
 		info = salt.GetToken().Return[0].Token
-		err := reddao.InsertTTLData("token", info, "EX", "86400")
+		err := reddao.InsertTTLData("token", info, "EX", "3600")
 		if !tools.CheckERR(err, "Inserter Token Failed") {
 			return
 		}
