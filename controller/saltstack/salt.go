@@ -3,6 +3,8 @@ package saltstack
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"gin-web-demo/conf"
 	"gin-web-demo/dao"
 	"gin-web-demo/tools"
@@ -23,9 +25,9 @@ func (s *SaltController) GetToken() (saltinfo conf.Returninfo) {
 
 	//配置请求信息
 	info := &conf.Info{
-		Username: "saltapi",
-		Password: "saltapi",
-		Eauth:    "pam",
+		Username: conf.Config.Conf.Saltauth[0].Username,
+		Password: conf.Config.Conf.Saltauth[0].Password,
+		Eauth:    conf.Config.Conf.Saltauth[0].Eauth,
 	}
 	//序列化
 	buf, err := json.Marshal(info)
@@ -91,7 +93,10 @@ func pulicPost(token string, para *conf.JobRunner) (response *http.Response) {
 	}
 	//Object序列化
 	data, err := json.Marshal(cmd)
-	tools.CheckERR(err, "PostModulJob Object json marshal Is Failed")
+	if !tools.CheckERR(err, "PostModulJob Object json marshal Is Failed") {
+		return response
+	}
+	conf.WriteLog(fmt.Sprintf("%s[Return]cmd=%s,序列化后=%s\n", time.Now().Format("2006-01-02 15:04:05"), cmd, string(data)))
 	//新建请求
 	re, err := http.NewRequest("POST", conf.Config.Conf.URL, bytes.NewBuffer(data))
 	if !tools.CheckERR(err, "Create PostModulJob Request Failed") {
@@ -102,6 +107,7 @@ func pulicPost(token string, para *conf.JobRunner) (response *http.Response) {
 	re.Header.Set("Accept", conf.Json_Accept)
 	re.Header.Set("X-Auth-Token", token)
 	re.Header.Set("Content-Type", conf.Json_Content_Type)
+	conf.WriteLog(fmt.Sprintf("%s[Return]re.body=%s\n", time.Now().Format("2006-01-02 15:04:05"), re.Body))
 	//fmt.Println(re)
 	//新建Client
 	client := http.Client{}
@@ -173,8 +179,6 @@ func (s *SaltController) GetCMDBAUTH() error {
 	tools.CheckERR(err, "New CMDB Request URL IS Failed")
 	//设置request
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "JWT ")
-	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9")
 	//请求连接等待返回
 	client := http.Client{}
 	repon, err := client.Do(req)
@@ -184,27 +188,47 @@ func (s *SaltController) GetCMDBAUTH() error {
 	//反序列化
 	err = json.Unmarshal(infodata, &obj)
 	tools.CheckERR(err, "json Unmarshal CMDB IS Failed")
+	conf.WriteLog(fmt.Sprintf("%s[Return]AuthToken获取回来的消息为=%s\n", time.Now().Format("2006-01-02 15:04:05"), string(infodata)))
 	//存数据库
 	err = dao.RedisHandle{}.InsertTTLData("AuthToken", obj.Token, "EX", "18000")
 	tools.CheckERR(err, "json Unmarshal CMDB IS Failed")
 	return err
 }
 
+type Ip struct {
+	IP string `json:"ip"`
+}
+
 //查询CMDB的接口
-//func (s *SaltController) GetCMDBInfo(IP string) []string {
-//	//构建参数
-//	buf := []byte(IP)
-//	//构建连接
-//	req, err := http.NewRequest("POST", conf.Config.Conf.CMDB_api, bytes.NewBuffer(buf))
-//	tools.CheckERR(err, "New CMDB Request URL IS Failed")
-//	//设置request
-//	req.Header.Set("Content-Type", "application/json")
-//	req.Header.Set("Authorization", "JWT ")
-//	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9")
-//	//请求连接等待返回
-//	client := http.Client{}
-//	repon, err := client.Do(req)
-//	tools.CheckERR(err, "Request CMDB IS Failed")
-//	//ioutil.ReadAll(repon,)
-//
-//}
+func (s *SaltController) GetCMDBInfo(ips string) (string, error) {
+	var (
+		retruninfo conf.Retuencmdb
+		token      string
+	)
+	//取token信息
+	if token = reddao.GetDate("AuthToken"); len(token) < 0 {
+		return "", errors.New("Get CMDB AuthToken is Failed,Please check !")
+	}
+	//构建参数
+	ip := &Ip{IP: ips}
+	buf, err := json.Marshal(&ip)
+	if !tools.CheckERR(err, "New CMDB Request URL IS Failed") {
+		return "", errors.New("ip参数序列化失败请检查")
+	}
+	//构建连接
+	req, err := http.NewRequest("POST", conf.Config.Conf.Cmdb_infoapi, bytes.NewBuffer(buf))
+	tools.CheckERR(err, "New CMDB Request URL IS Failed")
+	//设置request
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "JWT"+" "+token)
+	//请求连接等待返回
+	client := http.Client{}
+	repon, err := client.Do(req)
+	tools.CheckERR(err, "Request CMDB IS Failed")
+	info, _ := ioutil.ReadAll(repon.Body)
+	json.Unmarshal(info, &retruninfo)
+	if retruninfo.Code != 00000 {
+		return "", errors.New("Dont's Get CMDB minion Address,Please check request!")
+	}
+	return retruninfo.Data.IPgroup, nil
+}

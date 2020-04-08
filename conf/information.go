@@ -13,6 +13,8 @@ var (
 	//事务处理事件拉取
 	//Chan2 = make(chan *JobReturn, 30)
 	Chan2 = make(chan *AllMessage, 30)
+	//钉钉通知
+	ChanDD = make(chan *DingTalkMarkdown, 15)
 	//全局配置信息
 	Config Ginconf
 )
@@ -75,7 +77,7 @@ type (
 	//返回的Job信息
 	JobReturn struct {
 		Return []List `json:"return"`
-		Count  int
+		Count  int    `json:-`
 	}
 	List struct {
 		Jid     string   `json:"jid"`
@@ -94,9 +96,9 @@ type JobRunner struct {
 		但它通常管理主机资源，比如文件状态，pillar文件，salt配置文件，以及关键模块<salt.wheel.key>功能类似于命令行中的salt-key。
 	*/
 	//模块名称
-	Client string `json:"client"`
+	Client string `json:"client,omitempty"`
 	//minions机器名称
-	Tgt string `json:"tgt"`
+	Tgt string `json:"tgt,omitempty"`
 	/*
 		'glob' - Bash glob completion - Default
 		'pcre' - Perl style regular expression
@@ -109,11 +111,11 @@ type JobRunner struct {
 		'compound' - Pass a compound match string
 	*/
 	//对tgt的匹配规则
-	Expr_form string `json:"expr_form"`
+	Expr_form string `json:"expr_form,omitempty"`
 	//func执行函数
-	Fun string `json:"fun"`
+	Fun string `json:"fun,omitempty"`
 	//fun的参数项
-	Arg string `json:"arg"`
+	Arg string `json:"arg,omitempty"`
 	//要过滤的参数选项
 	//Para string `json:"-"`
 }
@@ -182,8 +184,9 @@ type (
 		Event string  `json:"event"`
 	}
 	JobInfo struct {
-		Info   []JobMessage `json:"info"`
-		Return []string     `json:"return"`
+		Info     []JobMessage `json:"info"`
+		Return   []string     `json:"return"`
+		Hostname string       `json:"hostname"`
 	}
 	JobMessage struct {
 		Jid       string          `json:"jid"`
@@ -210,6 +213,10 @@ type EndJob struct {
 	Target []string `json:"target"`
 	//执行的结果
 	Info string `json:"info"`
+	//对象的Jid
+	Jid string `json:"jid"`
+	//主机名
+	Hostname string `json:"hostname"`
 }
 
 //使用钉钉的参数
@@ -357,31 +364,6 @@ func SetData(data JobInfo) *EndJob {
 		Info:      data.Info[0].Result[data.Info[0].Minions[0]].Return,
 	}
 	return redata
-}
-
-//构造传递给钉钉的消息对象
-func SetDD(data *AllMessage, end *EndJob) *DingTalkMarkdown {
-	ip := fmt.Sprintf("http://%s:9090/data/query/", tools.GetHostIP())
-	url := fmt.Sprintf("[点击即可查看详情](%s)", ip+data.JobReceipt.Return[0].Jid)
-	//内容构造
-	text := fmt.Sprintf("# 清理日志执行成功\n\n - 当前IP -> %s\n  - 执行的时间: %s\n - 处理的事件: %s \n - 处理的结果: %s\n - 详细日志信息: %s \n",
-		end.Target,
-		end.AggrTime,
-		data.Notifications.CommonAnnotations["description"],
-		"成功清除指定时间的日志",
-		url)
-	//构造消息函数
-	markdown := &DingTalkMarkdown{
-		MsgType: "markdown",
-		Markdown: &Markdown{
-			Title: "功能测试请忽略!",
-			Text:  text,
-		},
-		At: &At1{
-			IsAtAll: true,
-		},
-	}
-	return markdown
 }
 
 //写日志信息

@@ -23,7 +23,6 @@ func init() {
 func main() {
 	//初始化路由
 	r := routes.SetupRouter()
-
 	//获取当前的IP
 	//ip := tools.GetHostIP()
 

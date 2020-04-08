@@ -28,6 +28,8 @@ func Event() {
 			} else {
 				go handl(info)
 			}
+		case dmsg := <-conf.ChanDD:
+			dd.Postcontent(dmsg)
 		}
 	}
 }
@@ -48,7 +50,7 @@ func sched(data *conf.AllMessage) {
 		conf.WriteLog(fmt.Sprintf("[info]获取Token信息=%s\n", info))
 	}
 	//获取auth Token
-	if reddao.GetDate("AuthToken"); info == "" {
+	if auth := reddao.GetDate("AuthToken"); auth == "" {
 		err := salt.GetCMDBAUTH()
 		if err != nil {
 			conf.WriteLog(fmt.Sprintf("[error]无法获取到token,%s\n", err))
@@ -87,23 +89,45 @@ func sched(data *conf.AllMessage) {
 	  }
 	*/
 	//取ipgroup组信息
-	ipgroup := salt.GetCMDBInfo(data.Eventhand.Address)
+	ipgroup, err := salt.GetCMDBInfo(data.Eventhand.Address)
+	if err != nil {
+		fmt.Println(err)
+		ipgroup = data.Eventhand.Address
+		conf.WriteLog(fmt.Sprintf("%s[Return]重置minion-ip=%s\n", time.Now().Format("2006-01-02 15:04:05"), ipgroup))
+	}
 	ipgroups := strings.Split(ipgroup, ",")
-	conf.WriteLog(fmt.Sprintf("%s[Return]CMDB返回的消息=%s\n", time.Now().Format("2006-01-02 15:04:05"), ipgroups))
-	for _, ip := range ipgroups {
-		//赋值给IP
-		job.Job.Tgt = ip
-		//进行Post请求取回事物执行ID
+	conf.WriteLog(fmt.Sprintf("%s[Return]CMDB返回的消息=%s,当前触发任务的IP=%s", time.Now().Format("2006-01-02 15:04:05"), ipgroups, data.Eventhand.HostName+" "+data.Eventhand.Address))
+	//排除空数组行为
+	if len(ipgroups) > 0 {
+		for _, ip := range ipgroups {
+			//赋值给IP
+			job.Job.Tgt = ip
+			//进行Post请求取回事物执行ID
+			resultid := salt.PostModulJob(info, &job.Job)
+			conf.WriteLog(fmt.Sprintf("%s[Return]resultid=%s\n", time.Now().Format("2006-01-02 15:04:05"), resultid))
+			//不存在则成立跳出循环
+			if len(resultid.Return[0].Minions) > 0 {
+				//构造对象
+				data.JobReceipt = resultid
+				conf.WriteLog(fmt.Sprintf("%s[Return]异步任务返回的消息%s\n", time.Now().Format("2006-01-02 15:04:05"), data.JobReceipt.Return))
+				conf.Chan2 <- data
+			}
+		}
+	} else {
+		//当CMDB返回单网卡的时候执行
+		job.Job.Tgt = data.Eventhand.Address
 		resultid := salt.PostModulJob(info, &job.Job)
-		//不存在则成立跳出循环
 		if len(resultid.Return[0].Minions) > 0 {
-			//构造对象
-			data.JobReceipt = resultid
 			conf.WriteLog(fmt.Sprintf("%s[Return]异步任务返回的消息%s\n", time.Now().Format("2006-01-02 15:04:05"), data.JobReceipt.Return))
 			conf.Chan2 <- data
+			//当单网卡返回也是空时候执行错误钉钉输出
+		} else if len(resultid.Return[0].Minions) > 0 && len(resultid.Return[0].Jid) > 0 {
+			//设置错误处理钉钉告警
+			md := dd.SetDingError("执行任务错误请查看", data.Eventhand.Address, data.Notifications.CommonAnnotations["labels"], resultid.Return[0].Jid, data.Notifications.CommonAnnotations["description"], "无法获取到正确的minion-IP")
+			conf.ChanDD <- md
 		}
 	}
-	conf.WriteLog(fmt.Sprintf("%s[Return]异步任务返回的消息都为空请检查{%s}\n", time.Now().Format("2006-01-02 15:04:05"), ipgroup))
+	//conf.WriteLog(fmt.Sprintf("%s[Return]异步任务返回的消息都为空请检查{%s}\n", time.Now().Format("2006-01-02 15:04:05"), ipgroup))
 }
 
 //执行jobs事件的查询
@@ -137,18 +161,17 @@ func handl(info *conf.AllMessage) {
 		if !tools.CheckERR(err, "构造写入redis的数据信息Json Manshal is Failed") {
 			return
 		}
+		//构造钉钉消息
+		markdown := dd.SetDD("日志处理结果请查看", info, endjob)
+		//发送钉钉消息
+		conf.ChanDD <- markdown
+		conf.WriteLog(fmt.Sprintf("%s[Debug]=%s\n", time.Now().Format("2006-01-02 15:04:05"), markdown))
 		//写入redis数据库(data.Info[0].Result[key].Return)
 		if err := reddao.InsertDate(jid, string(a)); err != nil {
 			fmt.Println(err)
 			return
 		}
-		conf.WriteLog(fmt.Sprintf("插入数据库成功=%s\n", info.JobReceipt.Return[0].Jid))
-		//传递的钉钉构造函数
-		markdown := conf.SetDD(info, endjob)
-		err = dd.Postcontent(markdown)
-		if !tools.CheckERR(err, "PostDingding is Failed") {
-			return
-		}
+		conf.WriteLog(fmt.Sprintf("%s[info]插入数据库成功=%s\n", time.Now().Format("2006-01-02 15:04:05"), info.JobReceipt.Return[0].Jid))
 	} else {
 		info.JobReceipt.Count = count
 		//fmt.Println("没有获取到", info.JobReceipt.Return[0].Minions, info.JobReceipt.Count, "ID=", info.JobReceipt.Return[0].Jid)

@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var redao = dao.RedisHandle{}
@@ -54,6 +55,7 @@ func AlterManagerWebHookHandler(c *gin.Context) {
 	}
 	//传递给channel调用
 	conf.Chan1 <- Obj
+	conf.WriteLog(fmt.Sprintf("%s[Return]新事件进入ID为=%s\n", time.Now().Format("2006-01-02 15:04:05"), id))
 	c.Writer.WriteString("ok")
 }
 
