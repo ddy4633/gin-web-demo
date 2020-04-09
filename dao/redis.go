@@ -1,6 +1,7 @@
 package dao
 
 import (
+	"errors"
 	"fmt"
 	"gin-web-demo/conf"
 	"gin-web-demo/tools"
@@ -184,4 +185,20 @@ func (r RedisHandle) ZremDate(key, value string) error {
 		return err
 	}
 	return err
+}
+
+//任务队列(add集合)
+func (r RedisHandle) SaddQueue(key, Member string) error {
+	//获取一个连接
+	c := Pool.Get()
+	defer c.Close()
+	//新增member
+	a, err := c.Do("ZADD")
+	va, _ := redis.Int(a, err)
+	if va == 1 {
+		return errors.New("key is active!")
+	} else if va != 0 && va != 1 {
+		return errors.New("redis zadd is failed,An unknown error has occurred")
+	}
+	return nil
 }

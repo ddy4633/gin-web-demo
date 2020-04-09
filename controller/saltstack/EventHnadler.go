@@ -100,6 +100,11 @@ func sched(data *conf.AllMessage) {
 	//排除空数组行为
 	if len(ipgroups) > 0 {
 		for _, ip := range ipgroups {
+			//判断是否在队列中
+			if err := reddao.SaddQueue("Eventlist", data.Eventhand.Address); err != nil {
+				conf.WriteLog(fmt.Sprintf("%s[DEBUG]事件已经在执行队列中=%s\n", tools.GetTimeNow(), err))
+				goto Over
+			}
 			//赋值给IP
 			job.Job.Tgt = ip
 			//进行Post请求取回事物执行ID
@@ -127,6 +132,9 @@ func sched(data *conf.AllMessage) {
 			conf.ChanDD <- md
 		}
 	}
+	//直接结束事件
+Over:
+	return
 	//conf.WriteLog(fmt.Sprintf("%s[Return]异步任务返回的消息都为空请检查{%s}\n", time.Now().Format("2006-01-02 15:04:05"), ipgroup))
 }
 
@@ -139,9 +147,13 @@ func handl(info *conf.AllMessage) {
 	token := reddao.GetDate("token")
 	//执行任务的ID号
 	jid := info.JobReceipt.Return[0].Jid
-	//中断指令
+	//超时中断指令
 	if count == info.AddonRunners.Count {
 		reddao.SaddDate(info.JobReceipt.Return[0].Jid)
+		//构造钉钉消息
+		markdown := dd.SetDingError("执行任务超时请查看", info.Eventhand.Address, info.Eventhand.HostName, info.JobReceipt.Return[0].Jid, info.Notifications.CommonAnnotations["description"], "执行目标任务超时1分30秒无回复")
+		conf.ChanDD <- markdown
+		//发送钉钉消息
 		conf.WriteLog(fmt.Sprintf("%s[Result]执行结果反馈 %s\n", time.Now().Format("2006-01-02 15:04:05"), info.JobReceipt.Return[0].Minions, "+", jid, "无法获取到JOb信息"))
 		return
 	}
