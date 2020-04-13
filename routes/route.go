@@ -8,7 +8,7 @@ import (
 	"gin-web-demo/dao"
 	"gin-web-demo/tools"
 	"github.com/gin-gonic/gin"
-	"strconv"
+	"github.com/gin-gonic/gin/binding"
 	"strings"
 	"time"
 )
@@ -18,15 +18,8 @@ var redao = dao.RedisHandle{}
 //定义Webhook
 func AlterManagerWebHookHandler(c *gin.Context) {
 	var (
-		//info conf.HookMessageInfo
 		test conf.Notification
 	)
-	//转换字节流
-	//byte, _ := ioutil.ReadAll(c.Request.Body)
-	//转换成json对象
-	//if json.Unmarshal(byte, &info) != nil {
-	//	fmt.Println("json error")
-	//}
 	err := c.BindJSON(&test)
 	if !tools.CheckERR(err, "receive alterManager info json is Failed") {
 		return
@@ -75,37 +68,31 @@ func GetToken(c *gin.Context) {
 //执行命令
 func PostJobhandler(c *gin.Context) {
 	//接受post任务的参数
-	cli := c.PostForm("client")
-	tgt := c.PostForm("tgt")
-	expr := c.PostForm("expr_form")
-	fun := c.PostForm("fun")
-	arg := c.PostForm("arg")
-	parahost := c.PostForm("parahost")
-	paraevent := c.PostForm("paraevent")
-	switchs := c.PostForm("switch")
-	count := c.PostForm("count")
-	aint, _ := strconv.Atoi(switchs)
-	cint, _ := strconv.Atoi(count)
-	//构造函数
-	info := conf.JobRunner{
-		Client:    cli,
-		Tgt:       tgt,
-		Expr_form: expr,
-		Fun:       fun,
-		Arg:       arg,
+	var (
+		job       conf.AddonJobRunner
+		runner    conf.JobRunner
+		paraMeter conf.ParaMeter
+		err       error
+		data      []byte
+	)
+	//指定结构体的映射
+	err = c.ShouldBindBodyWith(&job, binding.JSON)
+	if !tools.CheckERR(err, "[ROUTE PostJobhandler] Set Config BindJson is Failed ") {
+		goto TARGET
 	}
-	para := conf.ParaMeter{
-		ParaHost:  parahost,
-		ParaEvent: paraevent,
+	err = c.ShouldBindBodyWith(&paraMeter, binding.JSON)
+	if !tools.CheckERR(err, "[ROUTE PostJobhandler] Set Config BindJson is Failed ") {
+		goto TARGET
 	}
-	Job := &conf.AddonJobRunner{
-		Job:    info,
-		Para:   para,
-		Switch: aint,
-		Count:  cint,
+	err = c.ShouldBindBodyWith(&runner, binding.JSON)
+	if !tools.CheckERR(err, "[ROUTE PostJobhandler] Set Config BindJson is Failed ") {
+		goto TARGET
 	}
+	//对象变量赋值
+	job.Job = runner
+	job.Para = paraMeter
 	//将执行的信息序列化存储到后端的redis中
-	data, err := json.Marshal(Job)
+	data, err = json.Marshal(job)
 	if !tools.CheckERR(err, "[PostJobHandler] json Marshal is Failed") {
 		c.JSON(401, gin.H{
 			"status": 1,
@@ -124,7 +111,17 @@ func PostJobhandler(c *gin.Context) {
 	}
 	c.JSON(200, gin.H{
 		"status": 0,
+		"job":    job,
 	})
+	return
+	//错误处理
+TARGET:
+	c.JSON(400, gin.H{
+		"message": err.Error(),
+		"code":    1,
+		"hint":    "请检查config配置文件参数是否正确或是缺失!",
+	})
+	return
 }
 
 //获取执行后的任务信息(以Josn回写)
@@ -158,4 +155,14 @@ func GetJobListPage(c *gin.Context) {
 //心跳
 func ResponPong(c *gin.Context) {
 	c.JSON(200, gin.H{"Message": "pong"})
+}
+
+func Textfun(c *gin.Context) {
+	job := conf.JobRunner{}
+	err := c.BindJSON(&job)
+	if err != nil {
+		c.JSON(400, err.Error())
+		return
+	}
+	c.JSON(200, job)
 }

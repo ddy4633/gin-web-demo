@@ -79,15 +79,6 @@ func sched(data *conf.AllMessage) {
 	//job.Job.Tgt = data.Eventhand.Address
 	//赋值对象
 	data.AddonRunners = job
-	/*测试的时候使用
-	  //构造函数
-	  Job := &conf.JobRunner{
-	          Client: "local_async",
-	          Tgt:    data.Address,
-	          Fun:    "cmd.run",
-	          Arg:    "time ping -c 2 baidu.com",
-	  }
-	*/
 	//取ipgroup组信息
 	ipgroup, err := salt.GetCMDBInfo(data.Eventhand.Address)
 	if err != nil {
@@ -102,9 +93,10 @@ func sched(data *conf.AllMessage) {
 		for _, ip := range ipgroups {
 			//判断是否在队列中
 			if err := reddao.SaddQueue("Eventlist", data.Eventhand.Address); err != nil {
-				conf.WriteLog(fmt.Sprintf("%s[DEBUG]事件已经在执行队列中=%s\n", tools.GetTimeNow(), err))
+				conf.WriteLog(fmt.Sprintf("%s[DEBUG]事件没有加入执行队列中=%s\n", tools.GetTimeNow(), err))
 				goto Over
 			}
+			conf.WriteLog(fmt.Sprintf("%s[DEBUG]事件没有已经加入执行队列中=%s\n", tools.GetTimeNow(), data.Eventhand.Address))
 			//赋值给IP
 			job.Job.Tgt = ip
 			//进行Post请求取回事物执行ID
@@ -143,6 +135,8 @@ func handl(info *conf.AllMessage) {
 	//统计查询的次数conf
 	count := info.JobReceipt.Count
 	count++
+	//释放队列中的任务
+	defer reddao.ZremDate("Eventlist", info.Eventhand.Address)
 	//查询Token
 	token := reddao.GetDate("token")
 	//执行任务的ID号
@@ -151,11 +145,18 @@ func handl(info *conf.AllMessage) {
 	if count == info.AddonRunners.Count {
 		reddao.SaddDate(info.JobReceipt.Return[0].Jid)
 		//构造钉钉消息
-		markdown := dd.SetDingError("执行任务超时请查看", info.Eventhand.Address, info.Eventhand.HostName, info.JobReceipt.Return[0].Jid, info.Notifications.CommonAnnotations["description"], "执行目标任务超时1分30秒无回复")
-		conf.ChanDD <- markdown
-		//发送钉钉消息
-		conf.WriteLog(fmt.Sprintf("%s[Result]执行结果反馈 %s\n", time.Now().Format("2006-01-02 15:04:05"), info.JobReceipt.Return[0].Minions, "+", jid, "无法获取到JOb信息"))
-		return
+		markdown := dd.SetDingError("执行任务超时请查看", info.Eventhand.Address, info.Eventhand.HostName, info.JobReceipt.Return[0].Jid, info.Notifications.CommonAnnotations["description"], "执行目标任务超时3分钟无回复")
+		if info.AddonRunners.TimeoutNUM == 0 {
+			conf.ChanDD <- markdown
+			//发送钉钉消息
+			conf.WriteLog(fmt.Sprintf("%s[Result]执行结果反馈 %s\n", time.Now().Format("2006-01-02 15:04:05"), info.JobReceipt.Return[0].Minions, "+", jid, "无法获取到JOb信息"))
+			return
+		} else {
+			//重置任务继续刷新
+			info.AddonRunners.TimeoutNUM -= 1
+			info.JobReceipt.Count = 0
+			conf.Chan2 <- info
+		}
 	}
 	//查询任务情况
 	data := salt.QueryJob(jid, token)
@@ -163,10 +164,8 @@ func handl(info *conf.AllMessage) {
 	if data.Info[0].Minions == nil {
 		return
 	}
-	//获取目标主机的IP
-	//key := info.Return[0].Minions[0]
-	//判断是否取值成功,失败则重新进入队列等待再次的处理
-	if data.Info[0].Result[data.Info[0].Minions[0]].Success {
+	//判断是否取值成功,失败则重新进入队列等待再次的处理(返回消息不为空并且状态为真)
+	if data.Info[0].Result[data.Info[0].Minions[0]].Success && data.Info[0].Result[data.Info[0].Minions[0]].Return != "" {
 		//构造写入redis的数据信息
 		endjob := conf.SetData(data)
 		a, err := json.Marshal(endjob)

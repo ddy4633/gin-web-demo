@@ -96,9 +96,9 @@ type JobRunner struct {
 		但它通常管理主机资源，比如文件状态，pillar文件，salt配置文件，以及关键模块<salt.wheel.key>功能类似于命令行中的salt-key。
 	*/
 	//模块名称
-	Client string `json:"client,omitempty"`
+	Client string `json:"client"`
 	//minions机器名称
-	Tgt string `json:"tgt,omitempty"`
+	Tgt string `json:"tgt"`
 	/*
 		'glob' - Bash glob completion - Default
 		'pcre' - Perl style regular expression
@@ -111,7 +111,7 @@ type JobRunner struct {
 		'compound' - Pass a compound match string
 	*/
 	//对tgt的匹配规则
-	Expr_form string `json:"expr_form,omitempty"`
+	Expr_form string `json:"expr_form,omitempty" `
 	//func执行函数
 	Fun string `json:"fun,omitempty"`
 	//fun的参数项
@@ -125,11 +125,13 @@ type (
 	AddonJobRunner struct {
 		Job JobRunner
 		//要过滤的参数选项
-		Para ParaMeter `json:"para"`
+		Para ParaMeter
 		//是否执行处理
 		Switch int `json:"switch"`
 		//任务超时的次数
 		Count int `json:"count"`
+		//超时重试次数
+		TimeoutNUM int `json:"timeout_num"`
 	}
 	ParaMeter struct {
 		//主机名过滤

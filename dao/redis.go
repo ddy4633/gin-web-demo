@@ -175,12 +175,12 @@ func (r RedisHandle) ZrangeDate(key string, range1, range2 int) (t []string, err
 }
 
 //删除有序集合中的元素
-func (r RedisHandle) ZremDate(key, value string) error {
+func (r RedisHandle) ZremDate(key, Member string) error {
 	//获取一个连接
 	c := Pool.Get()
 	defer c.Close()
 	//查询key
-	_, err := c.Do("ZREM", key, value)
+	_, err := c.Do("SREM", key, Member)
 	if !tools.CheckERR(err, "redis ZREM Value is Failed") {
 		return err
 	}
@@ -193,9 +193,9 @@ func (r RedisHandle) SaddQueue(key, Member string) error {
 	c := Pool.Get()
 	defer c.Close()
 	//新增member
-	a, err := c.Do("ZADD")
+	a, err := c.Do("SADD", key, Member)
 	va, _ := redis.Int(a, err)
-	if va == 1 {
+	if va == 0 {
 		return errors.New("key is active!")
 	} else if va != 0 && va != 1 {
 		return errors.New("redis zadd is failed,An unknown error has occurred")
