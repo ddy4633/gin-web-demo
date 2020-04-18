@@ -14,6 +14,7 @@ import (
 var (
 	reddao = dao.RedisHandle{}
 	salt   = SaltController{}
+	active = "minion存活检查有问题"
 )
 
 //事件处理流
@@ -40,15 +41,11 @@ func sched(data *conf.AllMessage) {
 		job      *conf.AddonJobRunner
 		info, ac string
 	)
+	//延迟推出后删除队列
+	defer reddao.ZremDate("Eventlist", data.Eventhand.Address)
 	//获取Token信息
-	if info = reddao.GetDate("token"); info == "" {
-		info = salt.GetToken().Return[0].Token
-		err := reddao.InsertTTLData("token", info, "EX", "3600")
-		if !tools.CheckERR(err, "Inserter Token Failed") {
-			return
-		}
-		conf.WriteLog(fmt.Sprintf("[info]获取Token信息=%s\n", info))
-	}
+	info, err := salt.Check()
+	tools.CheckERR(err, "取回token失败")
 	//获取auth Token
 	if auth := reddao.GetDate("AuthToken"); auth == "" {
 		err := salt.GetCMDBAUTH()
@@ -63,7 +60,7 @@ func sched(data *conf.AllMessage) {
 		return
 	}
 	//反序列化得到变量
-	err := json.Unmarshal([]byte(ac), &job)
+	err = json.Unmarshal([]byte(ac), &job)
 	if !tools.CheckERR(err, "") {
 		return
 	}
@@ -76,7 +73,6 @@ func sched(data *conf.AllMessage) {
 		conf.WriteLog(fmt.Sprintf("%s[info]开关已经关闭,当前事件为=%s\n", tools.GetTimeNow(), data))
 		return
 	}
-	//job.Job.Tgt = data.Eventhand.Address
 	//赋值对象
 	data.AddonRunners = job
 	//取ipgroup组信息
@@ -93,10 +89,10 @@ func sched(data *conf.AllMessage) {
 		for _, ip := range ipgroups {
 			//判断是否在队列中
 			if err := reddao.SaddQueue("Eventlist", data.Eventhand.Address); err != nil {
-				conf.WriteLog(fmt.Sprintf("%s[DEBUG]事件没有加入执行队列中=%s\n", tools.GetTimeNow(), err))
+				conf.WriteLog(fmt.Sprintf("%s[DEBUG]事件已经加入到执行队列中=%s\n", tools.GetTimeNow(), err))
 				goto Over
 			}
-			conf.WriteLog(fmt.Sprintf("%s[DEBUG]事件没有已经加入执行队列中=%s\n", tools.GetTimeNow(), data.Eventhand.Address))
+			conf.WriteLog(fmt.Sprintf("%s[DEBUG]事件没有加入执行队列中可以执行=%s\n", tools.GetTimeNow(), data.Eventhand.Address))
 			//赋值给IP
 			job.Job.Tgt = ip
 			//进行Post请求取回事物执行ID
@@ -108,6 +104,8 @@ func sched(data *conf.AllMessage) {
 				data.JobReceipt = resultid
 				conf.WriteLog(fmt.Sprintf("%s[Return]异步任务返回的消息%s\n", time.Now().Format("2006-01-02 15:04:05"), data.JobReceipt.Return))
 				conf.Chan2 <- data
+			} else {
+				return
 			}
 		}
 	} else {
@@ -120,11 +118,12 @@ func sched(data *conf.AllMessage) {
 			//当单网卡返回也是空时候执行错误钉钉输出
 		} else if len(resultid.Return[0].Minions) > 0 && len(resultid.Return[0].Jid) > 0 {
 			//设置错误处理钉钉告警
-			md := dd.SetDingError("执行任务错误请查看", data.Eventhand.Address, data.Notifications.CommonAnnotations["labels"], resultid.Return[0].Jid, data.Notifications.CommonAnnotations["description"], "无法获取到正确的minion-IP")
+			md := dd.SetDingError("执行任务错误请查看", data.Eventhand.Address, data.Notifications.CommonAnnotations["labels"], resultid.Return[0].Jid, data.Notifications.CommonAnnotations["description"], "无法获取到正确的minion-IP", active)
 			conf.ChanDD <- md
 		}
 	}
 	//直接结束事件
+	return
 Over:
 	return
 	//conf.WriteLog(fmt.Sprintf("%s[Return]异步任务返回的消息都为空请检查{%s}\n", time.Now().Format("2006-01-02 15:04:05"), ipgroup))
@@ -145,9 +144,11 @@ func handl(info *conf.AllMessage) {
 	if count == info.AddonRunners.Count {
 		reddao.SaddDate(info.JobReceipt.Return[0].Jid)
 		//构造钉钉消息
-		markdown := dd.SetDingError("执行任务超时请查看", info.Eventhand.Address, info.Eventhand.HostName, info.JobReceipt.Return[0].Jid, info.Notifications.CommonAnnotations["description"], "执行目标任务超时3分钟无回复")
+		markdown := dd.SetDingError("执行任务超时请查看", info.Eventhand.Address, info.Eventhand.HostName, info.JobReceipt.Return[0].Jid, info.Notifications.CommonAnnotations["description"], "执行目标任务超时3分钟无回复", active)
 		if info.AddonRunners.TimeoutNUM == 0 {
 			conf.ChanDD <- markdown
+			//清理队列
+			reddao.ZremDate("Eventlist", info.Eventhand.Address)
 			//发送钉钉消息
 			conf.WriteLog(fmt.Sprintf("%s[Result]执行结果反馈 %s\n", time.Now().Format("2006-01-02 15:04:05"), info.JobReceipt.Return[0].Minions, "+", jid, "无法获取到JOb信息"))
 			return
@@ -176,6 +177,8 @@ func handl(info *conf.AllMessage) {
 		markdown := dd.SetDD("日志处理结果请查看", info, endjob)
 		//发送钉钉消息
 		conf.ChanDD <- markdown
+		//清理队列
+		reddao.ZremDate("Eventlist", info.Eventhand.Address)
 		conf.WriteLog(fmt.Sprintf("%s[Debug]=%s\n", time.Now().Format("2006-01-02 15:04:05"), markdown))
 		//写入redis数据库(data.Info[0].Result[key].Return)
 		if err := reddao.InsertDate(jid, string(a)); err != nil {
@@ -191,6 +194,7 @@ func handl(info *conf.AllMessage) {
 		}
 		conf.Chan2 <- info
 	}
+	return
 }
 
 //过滤处理的事件

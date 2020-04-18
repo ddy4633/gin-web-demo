@@ -10,6 +10,7 @@ import (
 	"gin-web-demo/tools"
 	"io/ioutil"
 	"net/http"
+	"reflect"
 	"time"
 )
 
@@ -108,7 +109,7 @@ func pulicPost(token string, para *conf.JobRunner) (response *http.Response) {
 	re.Header.Set("X-Auth-Token", token)
 	re.Header.Set("Content-Type", conf.Json_Content_Type)
 	conf.WriteLog(fmt.Sprintf("%s[Return]re.body=%s\n", time.Now().Format("2006-01-02 15:04:05"), re.Body))
-	//fmt.Println(re)
+	//fmt.Println(re,"conf.Config.Conf.URL=",conf.Config.Conf.URL)
 	//新建Client
 	client := http.Client{}
 	//请求对端
@@ -231,4 +232,60 @@ func (s *SaltController) GetCMDBInfo(ips string) (string, error) {
 		return "", errors.New("Dont's Get CMDB minion Address,Please check request!")
 	}
 	return retruninfo.Data.IPgroup, nil
+}
+
+//salt-minion存活检测
+func (s *SaltController) ActiveSalt(address string) (bool, error) {
+	//获取token信息
+	token, err := s.Check()
+	fmt.Println("请求进来了", address, "", token, err)
+	if !tools.CheckERR(err, "获取token失败") {
+		return false, errors.New(fmt.Sprintf("内部获取token失败,ERROR=%s", err))
+	}
+	fmt.Println("请求进来了", token)
+	//构建json参数
+	cmd := &conf.JobRunner{
+		Client: "local",
+		Tgt:    address,
+		Fun:    "test.ping",
+	}
+	fmt.Printf("token=%s,cmd=%s\n", token, cmd)
+	//请求对端
+	obj := pulicPost(token, cmd)
+	data, err := ioutil.ReadAll(obj.Body)
+	if !tools.CheckERR(err, "read checkactive is Failed") {
+		return false, errors.New(fmt.Sprintf("读取ioutil失败,ERROR=%s", err))
+	}
+	check := &conf.CheckActive{}
+	err = json.Unmarshal(data, check)
+	//断言类型转换换
+	checks := check.Return[0].(map[string]interface{})
+	tools.CheckERR(err, "ActiveCheck json unmarshal is failed!")
+	conf.WriteLog(fmt.Sprintf("%s[Return]ActiveSalt返回信息为=%s\n", time.Now().Format("2006-01-02 15:04:05"), check))
+	//是否为无效值
+	if reflect.ValueOf(checks).IsValid() {
+		return false, errors.New("该salt-minion不存在!")
+	}
+	//是否存活
+	if !checks[address].(bool) {
+		conf.WriteLog(fmt.Sprintf("%s[salt-check]存活检测失败状态为=%s\n", tools.GetTimeNow(), check))
+		return false, errors.New("死亡状态!请检查")
+	}
+	return true, nil
+}
+
+//salt-Token调用检测
+func (s *SaltController) Check() (tokens string, err error) {
+	//获取Token信息
+	if tokens = reddao.GetDate("token"); tokens == "" {
+		fmt.Println("请求执行到获取token了")
+		tokens = s.GetToken().Return[0].Token
+		err = reddao.InsertTTLData("token", tokens, "EX", "3600")
+		if !tools.CheckERR(err, "Inserter Token Failed") {
+			return
+		}
+		conf.WriteLog(fmt.Sprintf("[info]获取Token信息=%s\n", tokens))
+	}
+	fmt.Println("请求返回获取token了")
+	return
 }

@@ -221,6 +221,11 @@ type EndJob struct {
 	Hostname string `json:"hostname"`
 }
 
+//主机存活检测
+type CheckActive struct {
+	Return []interface{} `json:"return"`
+}
+
 //使用钉钉的参数
 type (
 	Dingding struct {
@@ -275,6 +280,7 @@ type AClert struct {
 	EndsAt      time.Time         `json:"endsAt"`
 }
 
+//总的对象信息
 type Notification struct {
 	Version           string            `json:"version"`
 	GroupKey          string            `json:"groupKey"`
@@ -285,6 +291,11 @@ type Notification struct {
 	CommonAnnotations map[string]string `json:commonAnnotations`
 	ExternalURL       string            `json:externalURL`
 	Alerts            []AClert          `json:alerts`
+}
+
+//存活检车IP
+type IP struct {
+	Address string `json:"address"`
 }
 
 //sls格式返回数据的处理接收

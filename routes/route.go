@@ -14,6 +14,7 @@ import (
 )
 
 var redao = dao.RedisHandle{}
+var salt = saltstack.SaltController{}
 
 //定义Webhook
 func AlterManagerWebHookHandler(c *gin.Context) {
@@ -157,6 +158,7 @@ func ResponPong(c *gin.Context) {
 	c.JSON(200, gin.H{"Message": "pong"})
 }
 
+//测试
 func Textfun(c *gin.Context) {
 	job := conf.JobRunner{}
 	err := c.BindJSON(&job)
@@ -165,4 +167,16 @@ func Textfun(c *gin.Context) {
 		return
 	}
 	c.JSON(200, job)
+}
+
+//salt-minion存活检测
+func CheckActive(c *gin.Context) {
+	adress := c.PostForm("address")
+	status, err := salt.ActiveSalt(adress)
+	if status {
+		c.JSON(200, gin.H{"address": adress, "active": status, "message": err})
+	} else {
+		c.JSON(400, gin.H{"address": adress, "active": status, "message": err})
+	}
+
 }
