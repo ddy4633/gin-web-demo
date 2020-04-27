@@ -15,6 +15,10 @@ var (
 	Chan2 = make(chan *AllMessage, 30)
 	//钉钉通知
 	ChanDD = make(chan *DingTalkMarkdown, 15)
+	//存活IP
+	ChanJobs = make(chan *JobRunner)
+	//同步执行结果
+	ChanResult = make(chan string)
 	//全局配置信息
 	Config Ginconf
 )
@@ -63,7 +67,7 @@ type Info struct {
 	Token     string   `json:"token"`
 }
 
-//返回信息
+//异步返回信息
 type (
 	Returninfo struct {
 		Return []Info `json:"return"`
@@ -98,7 +102,7 @@ type JobRunner struct {
 	//模块名称
 	Client string `json:"client"`
 	//minions机器名称
-	Tgt string `json:"tgt"`
+	Tgt string `json:"tgt"binding:"required,ip"`
 	/*
 		'glob' - Bash glob completion - Default
 		'pcre' - Perl style regular expression
@@ -113,7 +117,7 @@ type JobRunner struct {
 	//对tgt的匹配规则
 	Expr_form string `json:"expr_form,omitempty" `
 	//func执行函数
-	Fun string `json:"fun,omitempty"`
+	Fun string `json:"fun,omitempty"binding:"required,"`
 	//fun的参数项
 	Arg string `json:"arg,omitempty"`
 	//要过滤的参数选项
@@ -221,7 +225,7 @@ type EndJob struct {
 	Hostname string `json:"hostname"`
 }
 
-//主机存活检测
+//主机存活检测和同步执行salt返回信息
 type CheckActive struct {
 	Return []interface{} `json:"return"`
 }

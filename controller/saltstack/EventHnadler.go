@@ -31,6 +31,8 @@ func Event() {
 			}
 		case dmsg := <-conf.ChanDD:
 			dd.Postcontent(dmsg)
+		case result := <-conf.ChanJobs:
+			ApiSalt(result)
 		}
 	}
 }
@@ -82,51 +84,32 @@ func sched(data *conf.AllMessage) {
 		ipgroup = data.Eventhand.Address
 		conf.WriteLog(fmt.Sprintf("%s[Return]重置minion-ip=%s\n", time.Now().Format("2006-01-02 15:04:05"), ipgroup))
 	}
-	ipgroups := strings.Split(ipgroup, ",")
-	conf.WriteLog(fmt.Sprintf("%s[Return]CMDB返回的消息=%s,当前触发任务的IP=%s", time.Now().Format("2006-01-02 15:04:05"), ipgroups, data.Eventhand.HostName+" "+data.Eventhand.Address))
-	//排除空数组行为
-	if len(ipgroups) > 0 {
-		for _, ip := range ipgroups {
-			//判断是否在队列中
-			if err := reddao.SaddQueue("Eventlist", data.Eventhand.Address); err != nil {
-				conf.WriteLog(fmt.Sprintf("%s[DEBUG]事件已经加入到执行队列中=%s\n", tools.GetTimeNow(), err))
-				goto Over
-			}
-			conf.WriteLog(fmt.Sprintf("%s[DEBUG]事件没有加入执行队列中可以执行=%s\n", tools.GetTimeNow(), data.Eventhand.Address))
-			//赋值给IP
-			job.Job.Tgt = ip
-			//进行Post请求取回事物执行ID
-			resultid := salt.PostModulJob(info, &job.Job)
-			conf.WriteLog(fmt.Sprintf("%s[Return]resultid=%s\n", time.Now().Format("2006-01-02 15:04:05"), resultid))
-			//不存在则成立跳出循环
-			if len(resultid.Return[0].Minions) > 0 {
-				//构造对象
-				data.JobReceipt = resultid
-				conf.WriteLog(fmt.Sprintf("%s[Return]异步任务返回的消息%s\n", time.Now().Format("2006-01-02 15:04:05"), data.JobReceipt.Return))
-				conf.Chan2 <- data
-			} else {
-				return
-			}
-		}
+	//赋值给任务执行的ip
+	data.AddonRunners.Job.Tgt = activeaddress(ipgroup)
+	conf.WriteLog(fmt.Sprintf("%s[Return]CMDB返回的消息=%s,当前触发任务的IP=%s", time.Now().Format("2006-01-02 15:04:05"), data.AddonRunners.Job.Tgt, data.Eventhand.HostName+" "+data.Eventhand.Address))
+	//判断是否在队列中
+	if err := reddao.SaddQueue("Eventlist", data.Eventhand.Address); err != nil {
+		conf.WriteLog(fmt.Sprintf("%s[DEBUG]事件已经加入到执行队列中该事件不能被重复执行=%s\n", tools.GetTimeNow(), err))
+		return
+	}
+	conf.WriteLog(fmt.Sprintf("%s[DEBUG]事件不存在执行队列中可以执行=%s\n", tools.GetTimeNow(), data.Eventhand.Address))
+	//进行Post请求取回事物执行ID
+	resultid := salt.PostModulJob(info, &job.Job)
+	conf.WriteLog(fmt.Sprintf("%s[Return]resultid=%s\n", time.Now().Format("2006-01-02 15:04:05"), resultid))
+	//不存在则成立跳出循环
+	if len(resultid.Return[0].Minions) > 0 {
+		//构造对象
+		data.JobReceipt = resultid
+		conf.WriteLog(fmt.Sprintf("%s[Return]异步任务返回的消息%s\n", time.Now().Format("2006-01-02 15:04:05"), data.JobReceipt.Return))
+		conf.Chan2 <- data
+		//排除空数组行为
 	} else {
-		//当CMDB返回单网卡的时候执行
-		job.Job.Tgt = data.Eventhand.Address
-		resultid := salt.PostModulJob(info, &job.Job)
-		if len(resultid.Return[0].Minions) > 0 {
-			conf.WriteLog(fmt.Sprintf("%s[Return]异步任务返回的消息%s\n", time.Now().Format("2006-01-02 15:04:05"), data.JobReceipt.Return))
-			conf.Chan2 <- data
-			//当单网卡返回也是空时候执行错误钉钉输出
-		} else if len(resultid.Return[0].Minions) > 0 && len(resultid.Return[0].Jid) > 0 {
-			//设置错误处理钉钉告警
-			md := dd.SetDingError("执行任务错误请查看", data.Eventhand.Address, data.Notifications.CommonAnnotations["labels"], resultid.Return[0].Jid, data.Notifications.CommonAnnotations["description"], "无法获取到正确的minion-IP", active)
-			conf.ChanDD <- md
-		}
+		//设置错误处理钉钉告警
+		md := dd.SetDingError("执行任务错误请查看", data.Eventhand.Address, data.Notifications.CommonAnnotations["labels"], resultid.Return[0].Jid, data.Notifications.CommonAnnotations["description"], "无法获取到正确的minion-IP", active)
+		conf.ChanDD <- md
 	}
 	//直接结束事件
 	return
-Over:
-	return
-	//conf.WriteLog(fmt.Sprintf("%s[Return]异步任务返回的消息都为空请检查{%s}\n", time.Now().Format("2006-01-02 15:04:05"), ipgroup))
 }
 
 //执行jobs事件的查询
@@ -142,6 +125,10 @@ func handl(info *conf.AllMessage) {
 	jid := info.JobReceipt.Return[0].Jid
 	//超时中断指令
 	if count == info.AddonRunners.Count {
+		//存活检测
+		_, err := salt.ActiveSalt(info.Eventhand.Address)
+		active = err.Error()
+		//写到数据库中
 		reddao.SaddDate(info.JobReceipt.Return[0].Jid)
 		//构造钉钉消息
 		markdown := dd.SetDingError("执行任务超时请查看", info.Eventhand.Address, info.Eventhand.HostName, info.JobReceipt.Return[0].Jid, info.Notifications.CommonAnnotations["description"], "执行目标任务超时3分钟无回复", active)
@@ -156,7 +143,7 @@ func handl(info *conf.AllMessage) {
 			//重置任务继续刷新
 			info.AddonRunners.TimeoutNUM -= 1
 			info.JobReceipt.Count = 0
-			conf.Chan2 <- info
+			conf.Chan1 <- info
 		}
 	}
 	//查询任务情况
@@ -221,4 +208,54 @@ func filtstring(data *conf.EventHand, para conf.ParaMeter) bool {
 		}
 	}
 	return true
+}
+
+//存活检测
+func activeaddress(ipgroup string) (ip string) {
+	var err error
+	//IP分割
+	ipgroups := strings.Split(ipgroup, ",")
+	//如果存在则进行存活检测否则直接执行
+	if len(ipgroup) >= 2 {
+		for _, ip = range ipgroups {
+			if ok, err := salt.ActiveSalt(ip); ok {
+				active = err.Error()
+				conf.WriteLog(fmt.Sprintf("%s[Return]最终存活的IP=%s\n", time.Now().Format("2006-01-02 15:04:05"), ip))
+				return ip
+			}
+		}
+	}
+	if len(err.Error()) > 0 {
+		active = err.Error()
+	}
+	conf.WriteLog(fmt.Sprintf("%s[Return]只存在一个IP不需要存活检测=%s\n", time.Now().Format("2006-01-02 15:04:05"), ipgroup))
+	return ipgroup
+}
+
+//提供接口调用salt
+func ApiSalt(obj *conf.JobRunner) {
+	//obj := <- conf.ChanJobs
+	//获取Token信息
+	token, err := salt.Check()
+	tools.CheckERR(err, "取回token失败")
+	//获取auth Token
+	if auth := reddao.GetDate("AuthToken"); auth == "" {
+		err := salt.GetCMDBAUTH()
+		if err != nil {
+			conf.WriteLog(fmt.Sprintf("[error]无法获取到token,%s\n", err))
+			return
+		}
+	}
+	//取ipgroup组信息
+	ipgroup, err := salt.GetCMDBInfo(obj.Tgt)
+	if err != nil {
+		fmt.Println(err)
+		ipgroup = obj.Tgt
+		conf.WriteLog(fmt.Sprintf("%s[Return]重置minion-ip=%s\n", time.Now().Format("2006-01-02 15:04:05"), ipgroup))
+	}
+	//存活检测
+	obj.Tgt = activeaddress(ipgroup)
+	//post salt-master API Return Result
+	result := salt.PostRsyncModulJob(token, obj)
+	conf.ChanResult <- result
 }

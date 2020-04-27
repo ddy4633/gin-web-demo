@@ -10,7 +10,6 @@ import (
 	"gin-web-demo/tools"
 	"io/ioutil"
 	"net/http"
-	"reflect"
 	"time"
 )
 
@@ -67,7 +66,7 @@ func (s *SaltController) GetToken() (saltinfo conf.Returninfo) {
 	return saltinfo
 }
 
-//执行指定的模块
+//异步执行指定的模块
 func (s *SaltController) PostModulJob(token string, cmd *conf.JobRunner) *conf.JobReturn {
 	var (
 		//临时使用
@@ -80,6 +79,26 @@ func (s *SaltController) PostModulJob(token string, cmd *conf.JobRunner) *conf.J
 	json.Unmarshal(infodata, &relist)
 	//fmt.Println("infodata=", infodata)
 	return &relist
+}
+
+//同步执行模块
+func (s *SaltController) PostRsyncModulJob(token string, cmd *conf.JobRunner) string {
+	var (
+		//临时使用
+		data conf.CheckActive
+	)
+	//调用构造函数
+	response := pulicPost(token, cmd)
+	//读信息
+	infodata, _ := ioutil.ReadAll(response.Body)
+	json.Unmarshal(infodata, &data)
+	fmt.Println("infodata=", infodata)
+	//反射出结果
+	obj := data.Return[0].(map[string]interface{})
+	//返回对象
+	result := obj[cmd.Tgt].(string)
+	fmt.Println("infodata=", result)
+	return result
 }
 
 //公共的POST整理
@@ -262,16 +281,18 @@ func (s *SaltController) ActiveSalt(address string) (bool, error) {
 	checks := check.Return[0].(map[string]interface{})
 	tools.CheckERR(err, "ActiveCheck json unmarshal is failed!")
 	conf.WriteLog(fmt.Sprintf("%s[Return]ActiveSalt返回信息为=%s\n", time.Now().Format("2006-01-02 15:04:05"), check))
-	//是否为无效值
-	if reflect.ValueOf(checks).IsValid() {
+	//(只要满足以上3种情况其一)均为无效值
+	if len(checks) < 1 {
+		fmt.Println("checks len is =", len(checks))
 		return false, errors.New("该salt-minion不存在!")
 	}
-	//是否存活
 	if !checks[address].(bool) {
+		//是否存活
 		conf.WriteLog(fmt.Sprintf("%s[salt-check]存活检测失败状态为=%s\n", tools.GetTimeNow(), check))
-		return false, errors.New("死亡状态!请检查")
+		return false, errors.New("salt-minion死亡状态!请检查")
 	}
-	return true, nil
+	conf.WriteLog(fmt.Sprintf("%s[Return]判断结果的错误信息为Err=%s\n", time.Now().Format("2006-01-02 15:04:05"), err))
+	return true, errors.New("salt-minion存活ping通畅!")
 }
 
 //salt-Token调用检测

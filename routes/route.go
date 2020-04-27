@@ -173,10 +173,27 @@ func Textfun(c *gin.Context) {
 func CheckActive(c *gin.Context) {
 	adress := c.PostForm("address")
 	status, err := salt.ActiveSalt(adress)
+	fmt.Println("salt-minion存活监测:", err)
 	if status {
-		c.JSON(200, gin.H{"address": adress, "active": status, "message": err})
+		c.JSON(200, gin.H{"address": adress, "active": status, "message": err.Error()})
 	} else {
-		c.JSON(400, gin.H{"address": adress, "active": status, "message": err})
+		c.JSON(400, gin.H{"address": adress, "active": status, "message": err.Error()})
 	}
+}
 
+//提供给其他的http接口
+func HandleJobs(c *gin.Context) {
+	var runner *conf.JobRunner
+	err := c.BindJSON(&runner)
+	tools.CheckERR(err, "HandleJobs bind json is Failed, ")
+	fmt.Println(runner)
+	//写入事件并且执行
+	conf.ChanJobs <- runner
+	//取出事件
+	result := <-conf.ChanResult
+	c.JSON(200, gin.H{
+		"code":    0000,
+		"data":    result,
+		"message": "正常返回",
+	})
 }

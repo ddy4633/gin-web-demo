@@ -47,6 +47,10 @@ func redDial() (redis.Conn, error) {
 		fmt.Println(err)
 		return nil, err
 	}
+	//auth认证
+	if _, authErr := c.Do("AUTH", conf.Config.Conf.DataBase[0].Password); authErr != nil {
+		return nil, fmt.Errorf("redis auth password error: %s", authErr)
+	}
 	return c, err
 }
 
