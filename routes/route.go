@@ -172,12 +172,12 @@ func Textfun(c *gin.Context) {
 //salt-minion存活检测
 func CheckActive(c *gin.Context) {
 	adress := c.PostForm("address")
-	status, err := salt.ActiveSalt(adress)
-	fmt.Println("salt-minion存活监测:", err)
+	status, state := salt.ActiveSalt(adress)
+	fmt.Println("salt-minion存活监测:", state)
 	if status {
-		c.JSON(200, gin.H{"address": adress, "active": status, "message": err.Error()})
+		c.JSON(200, gin.H{"address": adress, "active": status, "message": state})
 	} else {
-		c.JSON(400, gin.H{"address": adress, "active": status, "message": err.Error()})
+		c.JSON(400, gin.H{"address": adress, "active": status, "message": state})
 	}
 }
 

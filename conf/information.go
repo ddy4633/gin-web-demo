@@ -40,6 +40,13 @@ type SSHInfo struct {
 	Port     string
 }
 
+//总任务执行时间
+type TimeTotle struct {
+	BeginTime time.Time
+	EndTime   time.Time
+	TotleTime time.Duration
+}
+
 //处理事件结构体
 type EventHand struct {
 	EventName string `json:"event_name"`
@@ -230,6 +237,12 @@ type CheckActive struct {
 	Return []interface{} `json:"return"`
 }
 
+//传递存活信息的结构体
+type Activestates struct {
+	States bool
+	Msg    string
+}
+
 //使用钉钉的参数
 type (
 	Dingding struct {
@@ -342,6 +355,10 @@ type AllMessage struct {
 	Eventhand *EventHand
 	//post的任务的异步回执单
 	JobReceipt *JobReturn
+	//总任务时间记录
+	TimeTotles TimeTotle
+	//自带的channel
+	Activechan chan Activestates
 }
 
 //cmdb返回的IP

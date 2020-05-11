@@ -7,6 +7,7 @@ import (
 	dd "gin-web-demo/controller/dingding"
 	"gin-web-demo/dao"
 	"gin-web-demo/tools"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -43,6 +44,8 @@ func sched(data *conf.AllMessage) {
 		job      *conf.AddonJobRunner
 		info, ac string
 	)
+	//记录时间
+	data.TimeTotles.BeginTime = time.Now()
 	//延迟推出后删除队列
 	defer reddao.ZremDate("Eventlist", data.Eventhand.Address)
 	//获取Token信息
@@ -84,7 +87,7 @@ func sched(data *conf.AllMessage) {
 		ipgroup = data.Eventhand.Address
 		conf.WriteLog(fmt.Sprintf("%s[Return]重置minion-ip=%s\n", time.Now().Format("2006-01-02 15:04:05"), ipgroup))
 	}
-	//赋值给任务执行的ip
+	//进行机器的存活检测
 	data.AddonRunners.Job.Tgt = activeaddress(ipgroup)
 	conf.WriteLog(fmt.Sprintf("%s[Return]CMDB返回的消息=%s,当前触发任务的IP=%s", time.Now().Format("2006-01-02 15:04:05"), data.AddonRunners.Job.Tgt, data.Eventhand.HostName+" "+data.Eventhand.Address))
 	//判断是否在队列中
@@ -97,7 +100,7 @@ func sched(data *conf.AllMessage) {
 	resultid := salt.PostModulJob(info, &job.Job)
 	conf.WriteLog(fmt.Sprintf("%s[Return]resultid=%s\n", time.Now().Format("2006-01-02 15:04:05"), resultid))
 	//不存在则成立跳出循环
-	if len(resultid.Return[0].Minions) > 0 {
+	if !reflect.ValueOf(resultid.Return[0].Minions).IsNil() && len(resultid.Return[0].Minions) > 0 {
 		//构造对象
 		data.JobReceipt = resultid
 		conf.WriteLog(fmt.Sprintf("%s[Return]异步任务返回的消息%s\n", time.Now().Format("2006-01-02 15:04:05"), data.JobReceipt.Return))
@@ -124,32 +127,30 @@ func handl(info *conf.AllMessage) {
 	//执行任务的ID号
 	jid := info.JobReceipt.Return[0].Jid
 	//超时中断指令
-	if count == info.AddonRunners.Count {
+	if count == info.AddonRunners.Count && info.AddonRunners.TimeoutNUM == 0 {
 		//存活检测
-		_, err := salt.ActiveSalt(info.Eventhand.Address)
-		active = err.Error()
+		_, state := salt.ActiveSalt(info.Eventhand.Address)
+		active = state
 		//写到数据库中
 		reddao.SaddDate(info.JobReceipt.Return[0].Jid)
 		//构造钉钉消息
 		markdown := dd.SetDingError("执行任务超时请查看", info.Eventhand.Address, info.Eventhand.HostName, info.JobReceipt.Return[0].Jid, info.Notifications.CommonAnnotations["description"], "执行目标任务超时3分钟无回复", active)
-		if info.AddonRunners.TimeoutNUM == 0 {
-			conf.ChanDD <- markdown
-			//清理队列
-			reddao.ZremDate("Eventlist", info.Eventhand.Address)
-			//发送钉钉消息
-			conf.WriteLog(fmt.Sprintf("%s[Result]执行结果反馈 %s\n", time.Now().Format("2006-01-02 15:04:05"), info.JobReceipt.Return[0].Minions, "+", jid, "无法获取到JOb信息"))
-			return
-		} else {
-			//重置任务继续刷新
-			info.AddonRunners.TimeoutNUM -= 1
-			info.JobReceipt.Count = 0
-			conf.Chan1 <- info
-		}
+		conf.ChanDD <- markdown
+		//清理队列
+		reddao.ZremDate("Eventlist", info.Eventhand.Address)
+		//发送钉钉消息
+		conf.WriteLog(fmt.Sprintf("%s[Result]执行结果反馈 %s\n", time.Now().Format("2006-01-02 15:04:05"), info.JobReceipt.Return[0].Minions, "+", jid, "无法获取到JOb信息"))
+		return
+	} else {
+		//抛弃旧的事件创建一个新的事件去处理
+		info.AddonRunners.TimeoutNUM -= 1
+		info.JobReceipt.Count = 0
+		conf.Chan1 <- info
 	}
 	//查询任务情况
 	data := salt.QueryJob(jid, token)
 	//排除空数组行为
-	if data.Info[0].Minions == nil {
+	if reflect.ValueOf(data.Info[0].Minions).IsNil() {
 		return
 	}
 	//判断是否取值成功,失败则重新进入队列等待再次的处理(返回消息不为空并且状态为真)
@@ -160,6 +161,10 @@ func handl(info *conf.AllMessage) {
 		if !tools.CheckERR(err, "构造写入redis的数据信息Json Manshal is Failed") {
 			return
 		}
+		//记录时间
+		info.TimeTotles.EndTime = time.Now()
+		//总耗时时间
+		info.TimeTotles.TotleTime = time.Since(info.TimeTotles.BeginTime)
 		//构造钉钉消息
 		markdown := dd.SetDD("日志处理结果请查看", info, endjob)
 		//发送钉钉消息
@@ -179,6 +184,8 @@ func handl(info *conf.AllMessage) {
 		if count%10 == 0 {
 			conf.WriteLog(fmt.Sprintf("%s[Process]没有获取到 节点=%s,次数=%s,ID=%s\n", time.Now().Format("2006-01-02 15:04:05"), info.JobReceipt.Return[0].Minions, info.JobReceipt.Count, info.JobReceipt.Return[0].Jid))
 		}
+		//conf.WriteLog(fmt.Sprintf("%s[info]事件重新进行提交 (info)=%v",time.Now().Format("2006-01-02 15:04:05"),info))
+		//进行异步任务的查询(默认180秒)
 		conf.Chan2 <- info
 	}
 	return
@@ -212,24 +219,24 @@ func filtstring(data *conf.EventHand, para conf.ParaMeter) bool {
 
 //存活检测
 func activeaddress(ipgroup string) (ip string) {
-	var err error
 	//IP分割
 	ipgroups := strings.Split(ipgroup, ",")
 	//如果存在则进行存活检测否则直接执行
 	if len(ipgroup) >= 2 {
 		for _, ip = range ipgroups {
-			if ok, err := salt.ActiveSalt(ip); ok {
-				active = err.Error()
-				conf.WriteLog(fmt.Sprintf("%s[Return]最终存活的IP=%s\n", time.Now().Format("2006-01-02 15:04:05"), ip))
+			if ok, state := salt.ActiveSalt(ip); ok {
+				active = state
+				conf.WriteLog(fmt.Sprintf("%s[Return]最终存活的IP=%s\n,EerrorInfo=%s", time.Now().Format("2006-01-02 15:04:05"), ip, state))
 				return ip
+			} else {
+				conf.WriteLog(fmt.Sprintf("%s[Return]检测失败的IP=%s\n,EerrorInfo=%s", time.Now().Format("2006-01-02 15:04:05"), ip, state))
 			}
 		}
+	} else {
+		conf.WriteLog(fmt.Sprintf("%s[Return]只存在一个IP不需要存活检测=%s\n", time.Now().Format("2006-01-02 15:04:05"), ipgroup))
+		return ipgroup
 	}
-	if len(err.Error()) > 0 {
-		active = err.Error()
-	}
-	conf.WriteLog(fmt.Sprintf("%s[Return]只存在一个IP不需要存活检测=%s\n", time.Now().Format("2006-01-02 15:04:05"), ipgroup))
-	return ipgroup
+	return
 }
 
 //提供接口调用salt

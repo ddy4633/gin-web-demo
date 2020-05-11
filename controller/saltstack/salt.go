@@ -10,6 +10,7 @@ import (
 	"gin-web-demo/tools"
 	"io/ioutil"
 	"net/http"
+	"reflect"
 	"time"
 )
 
@@ -254,12 +255,12 @@ func (s *SaltController) GetCMDBInfo(ips string) (string, error) {
 }
 
 //salt-minion存活检测
-func (s *SaltController) ActiveSalt(address string) (bool, error) {
+func (s *SaltController) ActiveSalt(address string) (bool, string) {
 	//获取token信息
 	token, err := s.Check()
 	fmt.Println("请求进来了", address, "", token, err)
 	if !tools.CheckERR(err, "获取token失败") {
-		return false, errors.New(fmt.Sprintf("内部获取token失败,ERROR=%s", err))
+		return false, fmt.Sprintf("内部获取token失败,ERROR=%s", err)
 	}
 	fmt.Println("请求进来了", token)
 	//构建json参数
@@ -273,26 +274,46 @@ func (s *SaltController) ActiveSalt(address string) (bool, error) {
 	obj := pulicPost(token, cmd)
 	data, err := ioutil.ReadAll(obj.Body)
 	if !tools.CheckERR(err, "read checkactive is Failed") {
-		return false, errors.New(fmt.Sprintf("读取ioutil失败,ERROR=%s", err))
+		return false, fmt.Sprintf("读取ioutil失败,ERROR=%s", err)
 	}
 	check := &conf.CheckActive{}
 	err = json.Unmarshal(data, check)
-	//断言类型转换换
-	checks := check.Return[0].(map[string]interface{})
 	tools.CheckERR(err, "ActiveCheck json unmarshal is failed!")
 	conf.WriteLog(fmt.Sprintf("%s[Return]ActiveSalt返回信息为=%s\n", time.Now().Format("2006-01-02 15:04:05"), check))
+	//防止越界
+	//if reflect.ValueOf(check.Return).IsNil()||reflect.ValueOf(check.Return).IsValid(){
+	//	return false,errors.New("发生未知错误,数组越界")
+	//}
+	//断言类型转换换
+	checks, ok := check.Return[0].(map[string]interface{})
+	//if !ok {
+	//	return false,errors.New("发生未知错误,数组越界")
+	//}
+	//if len(checks) < 1 {
+	//	fmt.Println("checks len is =", len(checks))
+	//	return false, errors.New("该salt-minion不存在!")
+	//}
+	//if !checks[address].(bool) {
+	//	//是否存活
+	//	conf.WriteLog(fmt.Sprintf("%s[salt-check]存活检测失败状态为=%s\n", tools.GetTimeNow(), check))
+	//	return false, errors.New("salt-minion死亡状态!请检查")
+	//}
 	//(只要满足以上3种情况其一)均为无效值
-	if len(checks) < 1 {
+	switch {
+	case len(checks) < 1:
 		fmt.Println("checks len is =", len(checks))
-		return false, errors.New("该salt-minion不存在!")
-	}
-	if !checks[address].(bool) {
+		return false, "该salt-minion不存在!"
+	case !checks[address].(bool):
 		//是否存活
 		conf.WriteLog(fmt.Sprintf("%s[salt-check]存活检测失败状态为=%s\n", tools.GetTimeNow(), check))
-		return false, errors.New("salt-minion死亡状态!请检查")
+		return false, "salt-minion死亡状态!请检查"
+	case !ok:
+		return false, "发生未知错误,数组越界"
+	case reflect.ValueOf(check.Return).IsNil() || reflect.ValueOf(check.Return).IsValid():
+		return false, "发生未知错误,数组越界"
 	}
 	conf.WriteLog(fmt.Sprintf("%s[Return]判断结果的错误信息为Err=%s\n", time.Now().Format("2006-01-02 15:04:05"), err))
-	return true, errors.New("salt-minion存活ping通畅!")
+	return true, "salt-minion存活ping通畅!"
 }
 
 //salt-Token调用检测
