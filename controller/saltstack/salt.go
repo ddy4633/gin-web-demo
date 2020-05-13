@@ -2,6 +2,7 @@ package saltstack
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"gin-web-demo/dao"
 	"gin-web-demo/tools"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"reflect"
 	"time"
@@ -16,6 +18,7 @@ import (
 
 //salt控制器
 type SaltController struct {
+	msg conf.Activestates
 }
 
 //获取salt初始化信息
@@ -117,7 +120,7 @@ func pulicPost(token string, para *conf.JobRunner) (response *http.Response) {
 	if !tools.CheckERR(err, "PostModulJob Object json marshal Is Failed") {
 		return response
 	}
-	conf.WriteLog(fmt.Sprintf("%s[Return]cmd=%s,序列化后=%s\n", time.Now().Format("2006-01-02 15:04:05"), cmd, string(data)))
+	log.Printf("cmd=%s,序列化后=%s\n", cmd, string(data))
 	//新建请求
 	re, err := http.NewRequest("POST", conf.Config.Conf.URL, bytes.NewBuffer(data))
 	if !tools.CheckERR(err, "Create PostModulJob Request Failed") {
@@ -128,7 +131,7 @@ func pulicPost(token string, para *conf.JobRunner) (response *http.Response) {
 	re.Header.Set("Accept", conf.Json_Accept)
 	re.Header.Set("X-Auth-Token", token)
 	re.Header.Set("Content-Type", conf.Json_Content_Type)
-	conf.WriteLog(fmt.Sprintf("%s[Return]re.body=%s\n", time.Now().Format("2006-01-02 15:04:05"), re.Body))
+	log.Printf("re.body=%s\n", re.Body)
 	//fmt.Println(re,"conf.Config.Conf.URL=",conf.Config.Conf.URL)
 	//新建Client
 	client := http.Client{}
@@ -209,7 +212,7 @@ func (s *SaltController) GetCMDBAUTH() error {
 	//反序列化
 	err = json.Unmarshal(infodata, &obj)
 	tools.CheckERR(err, "json Unmarshal CMDB IS Failed")
-	conf.WriteLog(fmt.Sprintf("%s[Return]AuthToken获取回来的消息为=%s\n", time.Now().Format("2006-01-02 15:04:05"), string(infodata)))
+	log.Printf("AuthToken获取回来的消息为=%s\n", time.Now().Format("2006-01-02 15:04:05"), string(infodata))
 	//存数据库
 	err = dao.RedisHandle{}.InsertTTLData("AuthToken", obj.Token, "EX", "18000")
 	tools.CheckERR(err, "json Unmarshal CMDB IS Failed")
@@ -279,7 +282,7 @@ func (s *SaltController) ActiveSalt(address string) (bool, string) {
 	check := &conf.CheckActive{}
 	err = json.Unmarshal(data, check)
 	tools.CheckERR(err, "ActiveCheck json unmarshal is failed!")
-	conf.WriteLog(fmt.Sprintf("%s[Return]ActiveSalt返回信息为=%s\n", time.Now().Format("2006-01-02 15:04:05"), check))
+	log.Printf("ActiveSalt返回信息为=%s\n", check)
 	//防止越界
 	//if reflect.ValueOf(check.Return).IsNil()||reflect.ValueOf(check.Return).IsValid(){
 	//	return false,errors.New("发生未知错误,数组越界")
@@ -302,18 +305,69 @@ func (s *SaltController) ActiveSalt(address string) (bool, string) {
 	switch {
 	case len(checks) < 1:
 		fmt.Println("checks len is =", len(checks))
+
 		return false, "该salt-minion不存在!"
 	case !checks[address].(bool):
 		//是否存活
-		conf.WriteLog(fmt.Sprintf("%s[salt-check]存活检测失败状态为=%s\n", tools.GetTimeNow(), check))
+		log.Printf("存活检测失败状态为=%s\n", tools.GetTimeNow(), check)
 		return false, "salt-minion死亡状态!请检查"
 	case !ok:
 		return false, "发生未知错误,数组越界"
 	case reflect.ValueOf(check.Return).IsNil() || reflect.ValueOf(check.Return).IsValid():
 		return false, "发生未知错误,数组越界"
 	}
-	conf.WriteLog(fmt.Sprintf("%s[Return]判断结果的错误信息为Err=%s\n", time.Now().Format("2006-01-02 15:04:05"), err))
+	log.Printf("判断结果的错误信息为Err=%s\n", err)
 	return true, "salt-minion存活ping通畅!"
+}
+
+//salt-minion存活检测
+func (s *SaltController) ActiveSalttest(ctx context.Context, address string, database *conf.AllMessage) {
+	//获取token信息
+	token, err := s.Check()
+	if !tools.CheckERR(err, "获取token失败") {
+		fmt.Sprintf("内部获取token失败,ERROR=%s", err)
+	}
+	//构建json参数
+	cmd := &conf.JobRunner{
+		Client: "local",
+		Tgt:    address,
+		Fun:    "test.ping",
+	}
+	log.Println("token=%s,cmd=%s\n", token, cmd)
+	//请求对端
+	obj := pulicPost(token, cmd)
+	data, err := ioutil.ReadAll(obj.Body)
+	if !tools.CheckERR(err, "read checkactive is Failed") {
+		fmt.Sprintf("读取ioutil失败,ERROR=%s", err)
+	}
+	check := &conf.CheckActive{}
+	err = json.Unmarshal(data, check)
+	tools.CheckERR(err, "ActiveCheck json unmarshal is failed!")
+
+	checks, ok := check.Return[0].(map[string]interface{})
+
+	//(只要满足以上3种情况其一)均为无效值
+	switch {
+	case len(checks) < 1:
+		s.msg.Msg = conf.Error_notActive
+		s.msg.States = false
+	case !checks[address].(bool):
+		//是否存活
+		log.Printf("salt-check存活检测失败状态为=%s\n", check)
+		s.msg.Msg = conf.Error_Delth
+		s.msg.States = false
+	case !ok:
+		s.msg.Msg = conf.Error_breakarry
+		s.msg.States = false
+	case reflect.ValueOf(check.Return).IsNil() || reflect.ValueOf(check.Return).IsValid():
+		s.msg.Msg = conf.Error_Active
+		s.msg.States = true
+	}
+	s.msg.Address = address
+	//conf.WriteLog(fmt.Sprintf("%s[Return]判断结果的错误信息为Err=%s\n", time.Now().Format("2006-01-02 15:04:05"), s.msg))
+	log.Printf("最终判断结果为=%s\n", s.msg)
+	database.Activechan <- s.msg
+
 }
 
 //salt-Token调用检测
@@ -326,8 +380,8 @@ func (s *SaltController) Check() (tokens string, err error) {
 		if !tools.CheckERR(err, "Inserter Token Failed") {
 			return
 		}
-		conf.WriteLog(fmt.Sprintf("[info]获取Token信息=%s\n", tokens))
+		log.Printf("获取Token信息=%s\n", tokens)
 	}
-	fmt.Println("请求返回获取token了")
+	//fmt.Println("请求返回获取token了")
 	return
 }

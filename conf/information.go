@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"gin-web-demo/tools"
 	"github.com/gin-gonic/gin"
+	"log"
 	"time"
 )
 
@@ -19,9 +20,18 @@ var (
 	ChanJobs = make(chan *JobRunner)
 	//同步执行结果
 	ChanResult = make(chan string)
+	//初始化对象
 	//全局配置信息
 	Config Ginconf
 )
+
+//日志信息设置
+func Newlogini() {
+	//配置一个日志格式的前缀
+	log.SetPrefix("[Info]")
+	//配置log的Flag参数
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+}
 
 //封装Ansible命令
 type AnsibleAPI struct {
@@ -109,7 +119,7 @@ type JobRunner struct {
 	//模块名称
 	Client string `json:"client"`
 	//minions机器名称
-	Tgt string `json:"tgt"binding:"required,ip"`
+	Tgt string `json:"tgt"`
 	/*
 		'glob' - Bash glob completion - Default
 		'pcre' - Perl style regular expression
@@ -124,7 +134,7 @@ type JobRunner struct {
 	//对tgt的匹配规则
 	Expr_form string `json:"expr_form,omitempty" `
 	//func执行函数
-	Fun string `json:"fun,omitempty"binding:"required,"`
+	Fun string `json:"fun,omitempty"`
 	//fun的参数项
 	Arg string `json:"arg,omitempty"`
 	//要过滤的参数选项
@@ -143,6 +153,8 @@ type (
 		Count int `json:"count"`
 		//超时重试次数
 		TimeoutNUM int `json:"timeout_num"`
+		//是否重试开关
+		RetrySwitch int `json:"retrySwitch"`
 	}
 	ParaMeter struct {
 		//主机名过滤
@@ -239,8 +251,9 @@ type CheckActive struct {
 
 //传递存活信息的结构体
 type Activestates struct {
-	States bool
-	Msg    string
+	States  bool
+	Msg     string
+	Address string
 }
 
 //使用钉钉的参数
@@ -358,7 +371,7 @@ type AllMessage struct {
 	//总任务时间记录
 	TimeTotles TimeTotle
 	//自带的channel
-	Activechan chan Activestates
+	Activechan chan Activestates `json:"-"`
 }
 
 //cmdb返回的IP
@@ -387,6 +400,10 @@ type AuthCmdb struct {
 const (
 	Json_Accept       = "application/json"
 	Json_Content_Type = "application/json"
+	Error_Delth       = "salt-minion死亡状态!请检查!"
+	Error_breakarry   = "发生未知错误,数组越界!"
+	Error_Active      = "salt-minion存活ping通畅!"
+	Error_notActive   = "该salt-minion不存在!"
 )
 
 //返回构造好的插入redis中的结果数据

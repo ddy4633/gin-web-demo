@@ -33,10 +33,12 @@ func AlterManagerWebHookHandler(c *gin.Context) {
 		Event:     test.Alerts[0].Annotations["description"],
 		Status:    1,
 	}
+	//加开关
+	add := &conf.AddonJobRunner{RetrySwitch: 0}
 	//生成全局唯一ID
 	id := tools.GetMd5String(tools.GetTimeNow())
 	//构造初始对象
-	Obj := &conf.AllMessage{ID: id, Notifications: test, Eventhand: ent1}
+	Obj := &conf.AllMessage{ID: id, Notifications: test, Eventhand: ent1, AddonRunners: add}
 	//序列化
 	data, err := json.Marshal(Obj)
 	if !tools.CheckERR(err, "JSON marshal ALLObj is Failed") {

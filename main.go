@@ -18,6 +18,8 @@ func init() {
 	dao.NewRedis()
 	//事件监听处理
 	go saltstack.Event()
+	//设置日志
+	conf.Newlogini()
 }
 
 func main() {
