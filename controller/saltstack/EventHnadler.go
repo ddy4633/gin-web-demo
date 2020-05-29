@@ -276,7 +276,9 @@ func activeaddress(ipgroup string, data *conf.AllMessage) (ip string) {
 			//正常存活返回
 			if result.States {
 				active = result.Msg
-				return result.Address
+				cancal()
+				ipgroups[0] = result.Address
+				break
 			}
 		}
 	}

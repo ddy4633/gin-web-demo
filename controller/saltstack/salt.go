@@ -254,7 +254,8 @@ func (s *SaltController) GetCMDBInfo(ips string) (string, error) {
 	if retruninfo.Code != 00000 {
 		return "", errors.New("Dont's Get CMDB minion Address,Please check request!")
 	}
-	return retruninfo.Data.IPgroup, nil
+	//log.Printf("JWT=%s,retruninfo=%s,error=%s\n",token,retruninfo,err.Error())
+	return retruninfo.Data.IPgroup, err
 }
 
 //salt-minion存活检测
@@ -333,7 +334,7 @@ func (s *SaltController) ActiveSalttest(ctx context.Context, address string, dat
 		Tgt:    address,
 		Fun:    "test.ping",
 	}
-	log.Println("token=%s,cmd=%s\n", token, cmd)
+	log.Printf("token=%s,cmd=%s\n", token, cmd)
 	//请求对端
 	obj := pulicPost(token, cmd)
 	data, err := ioutil.ReadAll(obj.Body)
