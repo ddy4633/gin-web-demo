@@ -58,3 +58,13 @@ parahost:过滤的instace信息
 ```
 
 ![](https://s1.ax1x.com/2020/04/08/GWwnFx.png)
+
+## 运行方式
+
+- 下载代码
+
+- 执行go构建CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o gin-web main.go
+
+- 执行Images构建：docker build -t xxxx/xxx/gin-web:v1 .
+
+- 运行：docker run -itd -p 9090:9090 --name gin-web xxxx/xxx/gin-web:v1

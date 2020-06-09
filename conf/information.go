@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+//全局变量
 var (
 	//告警结构构造
 	Chan1 = make(chan *AllMessage, 100)
